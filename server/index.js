@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const supabase = require("./supabaseClient");
-const { scoreOptions } = require("./scoringEngine");
+const { scoreOptions, hydrate } = require("./scoringEngine");
 
 const app = express();
 app.use(cors());
@@ -10,9 +10,65 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
 
+// Verifies the bearer token from Supabase Auth and attaches req.user.
+// Also lazily ensures a matching profiles row exists (first request after
+// signup) since travel_requests.user_id references profiles.id.
+async function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ error: "Missing authorization token" });
+  }
+
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) {
+    return res.status(401).json({ error: "Invalid or expired session" });
+  }
+
+  req.user = data.user;
+
+  await supabase
+    .from("profiles")
+    .upsert(
+      { id: req.user.id, name: req.user.email.split("@")[0], role: "employee" },
+      { onConflict: "id", ignoreDuplicates: true }
+    );
+
+  next();
+}
+
+// Must run after requireAuth. Only lets profiles.role = 'manager' through.
+async function requireManager(req, res, next) {
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", req.user.id)
+    .single();
+
+  if (error || !profile || profile.role !== "manager") {
+    return res.status(403).json({ error: "Manager role required" });
+  }
+  next();
+}
+
 // Health check
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "TravelWise API is running" });
+});
+
+// The signed-in user's own profile (used by the client to decide whether
+// to show the approvals view).
+app.get("/api/me", requireAuth, async (req, res) => {
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("id, name, role")
+    .eq("id", req.user.id)
+    .single();
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+  res.json({ ...profile, email: req.user.email });
 });
 
 // Proves the DB connection works: counts rows in the policies table
@@ -28,13 +84,14 @@ app.get("/api/db-check", async (req, res) => {
 });
 
 // Create a new travel request
-app.post("/api/travel-requests", async (req, res) => {
-  const { user_id, destination, purpose, start_date, end_date, estimated_cost } = req.body;
+app.post("/api/travel-requests", requireAuth, async (req, res) => {
+  const { destination, purpose, start_date, end_date, estimated_cost } = req.body;
+  const user_id = req.user.id;
 
   // Basic validation
-  if (!user_id || !destination || !start_date || !end_date) {
+  if (!destination || !start_date || !end_date) {
     return res.status(400).json({
-      error: "user_id, destination, start_date and end_date are required",
+      error: "destination, start_date and end_date are required",
     });
   }
 
@@ -50,11 +107,12 @@ app.post("/api/travel-requests", async (req, res) => {
   res.status(201).json({ message: "Travel request created", request: data });
 });
 
-// List all travel requests (newest first)
-app.get("/api/travel-requests", async (req, res) => {
+// List the signed-in user's travel requests (newest first)
+app.get("/api/travel-requests", requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from("travel_requests")
     .select("*")
+    .eq("user_id", req.user.id)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -63,8 +121,9 @@ app.get("/api/travel-requests", async (req, res) => {
   res.json({ count: data.length, requests: data });
 });
 
-// Generate + score options for a request, store them, return recommendation
-app.post("/api/travel-requests/:id/score", async (req, res) => {
+// Generate + score options for a request, store them, return recommendation.
+// Scorable by the request's own owner, or by a manager reviewing it.
+app.post("/api/travel-requests/:id/score", requireAuth, async (req, res) => {
   const { id } = req.params;
 
   // 1. Fetch the request
@@ -78,28 +137,162 @@ app.post("/api/travel-requests/:id/score", async (req, res) => {
     return res.status(404).json({ error: "Travel request not found" });
   }
 
-  // 2. Score the options
-  const scored = scoreOptions(request);
-
-  // 3. Persist options to the DB
-  const rows = scored.map((o) => ({
-    request_id: id,
-    cost: o.cost,
-    duration: o.duration,
-    type: o.type,
-    score: o.score,
-  }));
-  const { error: insErr } = await supabase.from("travel_options").insert(rows);
-  if (insErr) {
-    return res.status(500).json({ error: insErr.message });
+  if (request.user_id !== req.user.id) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", req.user.id)
+      .single();
+    if (!profile || profile.role !== "manager") {
+      return res.status(404).json({ error: "Travel request not found" });
+    }
   }
 
-  // 4. Return ranked options + the recommended one
+  // 2. Reuse options already scored for this request, if any, instead of
+  // generating (and inserting) a fresh duplicate set on every click.
+  const { data: existing, error: existingErr } = await supabase
+    .from("travel_options")
+    .select("*")
+    .eq("request_id", id);
+
+  if (existingErr) {
+    return res.status(500).json({ error: existingErr.message });
+  }
+
+  let scored;
+  if (existing.length > 0) {
+    scored = hydrate(existing, request);
+  } else {
+    const rows = scoreOptions(request).map((o) => ({
+      request_id: id,
+      cost: o.cost,
+      duration: o.duration,
+      type: o.type,
+      score: o.score,
+    }));
+    const { data: inserted, error: insErr } = await supabase.from("travel_options").insert(rows).select();
+    if (insErr) {
+      return res.status(500).json({ error: insErr.message });
+    }
+    // Re-derive from the inserted rows so the response includes each
+    // option's id (needed by the approvals view) and matches the exact
+    // shape returned on subsequent (cached) scoring calls.
+    scored = hydrate(inserted, request);
+  }
+
+  // 3. Return ranked options + the recommended one
   res.json({
     request_id: id,
     recommendation: scored[0],
     options: scored,
   });
+});
+
+// Pending requests across all users, for a manager to review — includes the
+// requester's name and any options already scored for that request.
+app.get("/api/approvals", requireAuth, requireManager, async (req, res) => {
+  const { data, error } = await supabase
+    .from("travel_requests")
+    .select("*, profiles!travel_requests_user_id_fkey(name), travel_options!travel_options_request_id_fkey(*)")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  const requests = data.map(({ profiles, travel_options, ...request }) => ({
+    ...request,
+    requester_name: profiles?.name || null,
+    options: travel_options.length > 0 ? hydrate(travel_options, request) : [],
+  }));
+
+  res.json({ count: requests.length, requests });
+});
+
+// Approve a request: pick one of its scored options and record the decision.
+app.post("/api/travel-requests/:id/approve", requireAuth, requireManager, async (req, res) => {
+  const { id } = req.params;
+  const { option_id } = req.body;
+
+  if (!option_id) {
+    return res.status(400).json({ error: "option_id is required" });
+  }
+
+  const { data: request, error: reqErr } = await supabase
+    .from("travel_requests")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (reqErr || !request) {
+    return res.status(404).json({ error: "Travel request not found" });
+  }
+  if (request.status !== "pending") {
+    return res.status(400).json({ error: `Request is already ${request.status}` });
+  }
+
+  // Confirm the chosen option actually belongs to this request
+  const { data: option, error: optErr } = await supabase
+    .from("travel_options")
+    .select("id")
+    .eq("id", option_id)
+    .eq("request_id", id)
+    .single();
+  if (optErr || !option) {
+    return res.status(400).json({ error: "option_id does not belong to this request" });
+  }
+
+  const { data: updated, error: updErr } = await supabase
+    .from("travel_requests")
+    .update({
+      status: "approved",
+      selected_option_id: option_id,
+      decided_by: req.user.id,
+      decided_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (updErr) {
+    return res.status(500).json({ error: updErr.message });
+  }
+  res.json({ message: "Request approved", request: updated });
+});
+
+// Reject a request outright — no option is selected.
+app.post("/api/travel-requests/:id/reject", requireAuth, requireManager, async (req, res) => {
+  const { id } = req.params;
+
+  const { data: request, error: reqErr } = await supabase
+    .from("travel_requests")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (reqErr || !request) {
+    return res.status(404).json({ error: "Travel request not found" });
+  }
+  if (request.status !== "pending") {
+    return res.status(400).json({ error: `Request is already ${request.status}` });
+  }
+
+  const { data: updated, error: updErr } = await supabase
+    .from("travel_requests")
+    .update({
+      status: "rejected",
+      decided_by: req.user.id,
+      decided_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (updErr) {
+    return res.status(500).json({ error: updErr.message });
+  }
+  res.json({ message: "Request rejected", request: updated });
 });
 
 app.listen(PORT, () => {

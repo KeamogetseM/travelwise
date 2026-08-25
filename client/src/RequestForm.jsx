@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { createTravelRequest } from "./api";
 
-// Temporary: the test user's id from your profiles table.
-// This goes away once we add login — the logged-in user's id will be used instead.
-const TEST_USER_ID = "f1a82286-2f1b-4d7f-8edc-836b0a134333";
-
 const empty = {
   destination: "",
   purpose: "",
@@ -28,7 +24,6 @@ export default function RequestForm({ onCreated }) {
     setSaving(true);
     try {
       await createTravelRequest({
-        user_id: TEST_USER_ID,
         destination: form.destination,
         purpose: form.purpose,
         start_date: form.start_date,

@@ -93,4 +93,19 @@ function explain(best, all, request) {
   return `Recommended because it is ${parts.join(", ")}.`;
 }
 
-module.exports = { scoreOptions };
+// Takes raw stored travel_options rows (cost/duration/type/score only — no
+// compliant/reason) and re-derives those presentation fields against the
+// given request, ranked best-first. Used wherever we read back options that
+// were already scored, instead of re-generating and re-inserting them.
+function hydrate(rows, request) {
+  const scored = rows
+    .map((o) => ({ ...o, compliant: isCompliant(o, request) }))
+    .sort((a, b) => b.score - a.score);
+
+  if (scored.length > 0) {
+    scored[0].reason = explain(scored[0], scored, request);
+  }
+  return scored;
+}
+
+module.exports = { scoreOptions, isCompliant, explain, hydrate };

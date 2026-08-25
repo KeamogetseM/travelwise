@@ -1,11 +1,18 @@
 // Central place for all calls to the backend API.
 // Thanks to the Vite proxy, "/api/..." is forwarded to http://localhost:5000
 
+import { supabase } from "./supabaseClient";
+
 const API = "/api";
 
 async function request(path, options = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+
   const res = await fetch(API + path, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
     ...options,
   });
   const data = await res.json();
@@ -29,4 +36,25 @@ export function createTravelRequest(payload) {
 
 export function scoreTravelRequest(id) {
   return request(`/travel-requests/${id}/score`, { method: "POST" });
+}
+
+// Current user / role
+export function getMe() {
+  return request("/me");
+}
+
+// Manager approvals
+export function getApprovals() {
+  return request("/approvals");
+}
+
+export function approveTravelRequest(id, optionId) {
+  return request(`/travel-requests/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ option_id: optionId }),
+  });
+}
+
+export function rejectTravelRequest(id) {
+  return request(`/travel-requests/${id}/reject`, { method: "POST" });
 }
