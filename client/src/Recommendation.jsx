@@ -8,7 +8,10 @@ function Bar({ value }) {
   );
 }
 
-export default function Recommendation({ result, loading }) {
+// onApprove: optional (option) => void — when given, renders an "Approve"
+// button per row (used by the manager Approvals view; omitted for the
+// requester's own read-only view). busy disables the buttons mid-request.
+export default function Recommendation({ result, loading, onApprove, busy }) {
   if (loading) return <p>Scoring options…</p>;
   if (!result) return null;
 
@@ -38,11 +41,12 @@ export default function Recommendation({ result, loading }) {
             <th style={{ padding: 6 }}>Time</th>
             <th style={{ padding: 6 }}>Policy</th>
             <th style={{ padding: 6 }}>Score</th>
+            {onApprove && <th style={{ padding: 6 }} />}
           </tr>
         </thead>
         <tbody>
           {options.map((o, i) => (
-            <tr key={i} style={{ borderBottom: "1px solid #f0f0f0", background: i === 0 ? "#f2f6fb" : "white" }}>
+            <tr key={o.id ?? i} style={{ borderBottom: "1px solid #f0f0f0", background: i === 0 ? "#f2f6fb" : "white" }}>
               <td style={{ padding: 6 }}>{o.type}</td>
               <td style={{ padding: 6 }}>R{o.cost}</td>
               <td style={{ padding: 6 }}>{o.duration}h</td>
@@ -50,6 +54,13 @@ export default function Recommendation({ result, loading }) {
               <td style={{ padding: 6, display: "flex", alignItems: "center", gap: 8 }}>
                 <Bar value={o.score} /> {o.score.toFixed(2)}
               </td>
+              {onApprove && (
+                <td style={{ padding: 6 }}>
+                  <button disabled={busy || !o.id} onClick={() => onApprove(o)}>
+                    Approve
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
