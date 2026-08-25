@@ -188,22 +188,31 @@ app.post("/api/travel-requests/:id/score", requireAuth, async (req, res) => {
   });
 });
 
-// Pending requests across all users, for a manager to review — includes the
-// requester's name and any options already scored for that request.
+// Requests across all users, for a manager to review — includes the
+// requester's name, the decider's name (once decided), and any options
+// already scored for that request. Defaults to the pending queue;
+// ?status=approved or ?status=rejected reviews past decisions.
 app.get("/api/approvals", requireAuth, requireManager, async (req, res) => {
+  const status = ["pending", "approved", "rejected"].includes(req.query.status)
+    ? req.query.status
+    : "pending";
+
   const { data, error } = await supabase
     .from("travel_requests")
-    .select("*, profiles!travel_requests_user_id_fkey(name), travel_options!travel_options_request_id_fkey(*)")
-    .eq("status", "pending")
+    .select(
+      "*, requester:profiles!travel_requests_user_id_fkey(name), decider:profiles!travel_requests_decided_by_fkey(name), travel_options!travel_options_request_id_fkey(*)"
+    )
+    .eq("status", status)
     .order("created_at", { ascending: false });
 
   if (error) {
     return res.status(500).json({ error: error.message });
   }
 
-  const requests = data.map(({ profiles, travel_options, ...request }) => ({
+  const requests = data.map(({ requester, decider, travel_options, ...request }) => ({
     ...request,
-    requester_name: profiles?.name || null,
+    requester_name: requester?.name || null,
+    decider_name: decider?.name || null,
     options: travel_options.length > 0 ? hydrate(travel_options, request) : [],
   }));
 

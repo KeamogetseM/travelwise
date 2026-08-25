@@ -44,8 +44,8 @@ export function getMe() {
 }
 
 // Manager approvals
-export function getApprovals() {
-  return request("/approvals");
+export function getApprovals(status = "pending") {
+  return request(`/approvals?status=${status}`);
 }
 
 export function approveTravelRequest(id, optionId) {
