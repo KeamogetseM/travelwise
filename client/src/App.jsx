@@ -1,122 +1,65 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useState } from "react";
+import { getTravelRequests, scoreTravelRequest } from "./api";
+import RequestForm from "./RequestForm";
+import Recommendation from "./Recommendation";
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [requests, setRequests] = useState([]);
+  const [error, setError] = useState(null);
+
+  const [activeId, setActiveId] = useState(null);   // which request we scored
+  const [result, setResult] = useState(null);       // the scoring result
+  const [loading, setLoading] = useState(false);
+
+  function loadRequests() {
+    getTravelRequests()
+      .then((data) => setRequests(data.requests))
+      .catch((err) => setError(err.message));
+  }
+
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+  async function handleScore(id) {
+    setActiveId(id);
+    setResult(null);
+    setLoading(true);
+    try {
+      const data = await scoreTravelRequest(id);
+      setResult(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div style={{ fontFamily: "system-ui", maxWidth: 700, margin: "40px auto", padding: "0 16px" }}>
+      <h1>TravelWise</h1>
 
-      <div className="ticks"></div>
+      <RequestForm onCreated={loadRequests} />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      <h2>Travel requests</h2>
+      {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
+      {requests.length === 0 && !error && <p>No requests yet.</p>}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      {requests.map((r) => (
+        <div key={r.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <strong>{r.destination}</strong> — {r.purpose || "no purpose"}
+              <div style={{ fontSize: 13, color: "#555" }}>
+                R{r.estimated_cost} · {r.status}
+              </div>
+            </div>
+            <button onClick={() => handleScore(r.id)}>Score options</button>
+          </div>
+
+          {activeId === r.id && <Recommendation result={result} loading={loading} />}
+        </div>
+      ))}
+    </div>
+  );
 }
-
-export default App
