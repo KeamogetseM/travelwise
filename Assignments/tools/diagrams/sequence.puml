@@ -1,0 +1,38 @@
+@startuml
+title Sequence Diagram - Submit a Travel Request and Predict Cost (as implemented)
+
+actor Employee
+participant "React UI" as UI
+participant "API (Node/Express)" as API
+participant "Cost Prediction\nService (ML)" as ML
+database "Database (Supabase)" as DB
+
+Employee -> UI : complete and submit request\n(origin, destination, class, dates)
+UI -> API : POST /api/travel-requests
+API -> DB : insert TravelRequest (status=pending)
+DB --> API : request id
+API -> API : compute days_to_departure\n= start_date - today
+
+API -> ML : POST /predict-cost\n{origin, destination,\ndays_to_departure, travel_class}
+alt ML service reachable
+  ML -> ML : load model.joblib\nrun RandomForest.predict()
+  ML --> API : {predicted_cost, model_version,\ncurrency, duration_hours}
+  API -> DB : update TravelRequest.predicted_cost
+else ML service unreachable
+  API -> API : log warning, continue\n(predicted_cost stays null)
+end
+
+DB --> API : updated request
+API --> UI : 201 Created (request incl. predicted_cost)
+UI --> Employee : show request in list
+
+== later: scoring (separate action) ==
+Employee -> UI : click "Score options"
+UI -> API : POST /api/travel-requests/:id/score
+API -> API : generateOptions()\nbaseline = predicted_cost\n  || estimated_cost || 5000
+API -> DB : insert TravelOptions + scores
+DB --> API : ok
+API --> UI : recommendation + ranked options
+UI --> Employee : display recommended option and reason
+
+@enduml

@@ -1,0 +1,36 @@
+@startuml
+title Deployment Diagram - TravelWise (current, as-run state)
+
+node "Developer Machine (Windows)" {
+  node "Node.js runtime" {
+    component "Vite dev server\n(client)\n:5173" as Vite
+    component "Express API\n(server)\n:5000" as Express
+  }
+  node "Python 3.13 venv" {
+    component "Flask ML service\n(ml-service)\n:8000" as Flask
+    artifact "model.joblib"
+  }
+}
+
+cloud "Supabase Cloud" {
+  database "PostgreSQL" as PG
+  component "Auth service" as Auth
+}
+
+Vite --> Express : HTTP (proxied /api)
+Express --> Flask : HTTP :8000
+Express --> PG : REST (service role key)
+Vite --> Auth : REST (publishable key)
+
+note bottom
+  This reflects the system as it actually runs
+  today (local dev, three local processes + a
+  managed cloud database). The target three-host
+  cloud deployment described in Assignment 2
+  (React on Vercel; Node + Python on Render) has
+  NOT been carried out — see Limitations (5.4)
+  and the traceability matrix (2.2) for the
+  deployment-related requirement's honest status.
+end note
+
+@enduml

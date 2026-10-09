@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const supabase = require("./supabaseClient");
 const { scoreOptions, hydrate } = require("./scoringEngine");
+const { predictCost } = require("./mlClient");
 
 const app = express();
 app.use(cors());
@@ -37,18 +38,20 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-// Must run after requireAuth. Only lets profiles.role = 'manager' through.
-async function requireManager(req, res, next) {
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", req.user.id)
-    .single();
+// Must run after requireAuth. Only lets the given profiles.role(s) through.
+function requireRole(...allowedRoles) {
+  return async (req, res, next) => {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", req.user.id)
+      .single();
 
-  if (error || !profile || profile.role !== "manager") {
-    return res.status(403).json({ error: "Manager role required" });
-  }
-  next();
+    if (error || !profile || !allowedRoles.includes(profile.role)) {
+      return res.status(403).json({ error: `Requires role: ${allowedRoles.join(" or ")}` });
+    }
+    next();
+  };
 }
 
 // Health check
@@ -85,7 +88,7 @@ app.get("/api/db-check", async (req, res) => {
 
 // Create a new travel request
 app.post("/api/travel-requests", requireAuth, async (req, res) => {
-  const { destination, purpose, start_date, end_date, estimated_cost } = req.body;
+  const { origin, destination, travel_class, purpose, start_date, end_date, estimated_cost } = req.body;
   const user_id = req.user.id;
 
   // Basic validation
@@ -97,14 +100,39 @@ app.post("/api/travel-requests", requireAuth, async (req, res) => {
 
   const { data, error } = await supabase
     .from("travel_requests")
-    .insert([{ user_id, destination, purpose, start_date, end_date, estimated_cost }])
+    .insert([{ user_id, origin, destination, travel_class, purpose, start_date, end_date, estimated_cost }])
     .select()
     .single();
 
   if (error) {
     return res.status(500).json({ error: error.message });
   }
-  res.status(201).json({ message: "Travel request created", request: data });
+
+  // Call the ML service for a predicted cost. Non-fatal: if it's
+  // unreachable, the request still saves and scoring falls back to
+  // estimated_cost, matching the documented graceful-degradation design.
+  let request = data;
+  if (origin && travel_class) {
+    try {
+      const daysToDeparture = Math.max(
+        0,
+        Math.round((new Date(start_date) - new Date()) / (1000 * 60 * 60 * 24))
+      );
+      const prediction = await predictCost({ origin, destination, days_to_departure: daysToDeparture, travel_class });
+
+      const { data: updated, error: updErr } = await supabase
+        .from("travel_requests")
+        .update({ predicted_cost: prediction.predicted_cost })
+        .eq("id", data.id)
+        .select()
+        .single();
+      if (!updErr) request = updated;
+    } catch (err) {
+      console.warn("Cost prediction unavailable:", err.message);
+    }
+  }
+
+  res.status(201).json({ message: "Travel request created", request });
 });
 
 // List the signed-in user's travel requests (newest first)
@@ -122,7 +150,7 @@ app.get("/api/travel-requests", requireAuth, async (req, res) => {
 });
 
 // Generate + score options for a request, store them, return recommendation.
-// Scorable by the request's own owner, or by a manager reviewing it.
+// Scorable by the request's own owner, or by a supervisor reviewing it.
 app.post("/api/travel-requests/:id/score", requireAuth, async (req, res) => {
   const { id } = req.params;
 
@@ -143,7 +171,7 @@ app.post("/api/travel-requests/:id/score", requireAuth, async (req, res) => {
       .select("role")
       .eq("id", req.user.id)
       .single();
-    if (!profile || profile.role !== "manager") {
+    if (!profile || profile.role !== "supervisor") {
       return res.status(404).json({ error: "Travel request not found" });
     }
   }
@@ -159,11 +187,19 @@ app.post("/api/travel-requests/:id/score", requireAuth, async (req, res) => {
     return res.status(500).json({ error: existingErr.message });
   }
 
+  const { data: policies, error: policiesErr } = await supabase
+    .from("policies")
+    .select("*")
+    .eq("active", true);
+  if (policiesErr) {
+    return res.status(500).json({ error: policiesErr.message });
+  }
+
   let scored;
   if (existing.length > 0) {
-    scored = hydrate(existing, request);
+    scored = hydrate(existing, request, policies);
   } else {
-    const rows = scoreOptions(request).map((o) => ({
+    const rows = scoreOptions(request, policies).map((o) => ({
       request_id: id,
       cost: o.cost,
       duration: o.duration,
@@ -177,7 +213,7 @@ app.post("/api/travel-requests/:id/score", requireAuth, async (req, res) => {
     // Re-derive from the inserted rows so the response includes each
     // option's id (needed by the approvals view) and matches the exact
     // shape returned on subsequent (cached) scoring calls.
-    scored = hydrate(inserted, request);
+    scored = hydrate(inserted, request, policies);
   }
 
   // 3. Return ranked options + the recommended one
@@ -188,11 +224,11 @@ app.post("/api/travel-requests/:id/score", requireAuth, async (req, res) => {
   });
 });
 
-// Requests across all users, for a manager to review — includes the
+// Requests across all users, for a supervisor to review — includes the
 // requester's name, the decider's name (once decided), and any options
 // already scored for that request. Defaults to the pending queue;
 // ?status=approved or ?status=rejected reviews past decisions.
-app.get("/api/approvals", requireAuth, requireManager, async (req, res) => {
+app.get("/api/approvals", requireAuth, requireRole("supervisor"), async (req, res) => {
   const status = ["pending", "approved", "rejected"].includes(req.query.status)
     ? req.query.status
     : "pending";
@@ -209,18 +245,26 @@ app.get("/api/approvals", requireAuth, requireManager, async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 
+  const { data: policies, error: policiesErr } = await supabase
+    .from("policies")
+    .select("*")
+    .eq("active", true);
+  if (policiesErr) {
+    return res.status(500).json({ error: policiesErr.message });
+  }
+
   const requests = data.map(({ requester, decider, travel_options, ...request }) => ({
     ...request,
     requester_name: requester?.name || null,
     decider_name: decider?.name || null,
-    options: travel_options.length > 0 ? hydrate(travel_options, request) : [],
+    options: travel_options.length > 0 ? hydrate(travel_options, request, policies) : [],
   }));
 
   res.json({ count: requests.length, requests });
 });
 
 // Approve a request: pick one of its scored options and record the decision.
-app.post("/api/travel-requests/:id/approve", requireAuth, requireManager, async (req, res) => {
+app.post("/api/travel-requests/:id/approve", requireAuth, requireRole("supervisor"), async (req, res) => {
   const { id } = req.params;
   const { option_id } = req.body;
 
@@ -271,7 +315,7 @@ app.post("/api/travel-requests/:id/approve", requireAuth, requireManager, async 
 });
 
 // Reject a request outright — no option is selected.
-app.post("/api/travel-requests/:id/reject", requireAuth, requireManager, async (req, res) => {
+app.post("/api/travel-requests/:id/reject", requireAuth, requireRole("supervisor"), async (req, res) => {
   const { id } = req.params;
 
   const { data: request, error: reqErr } = await supabase

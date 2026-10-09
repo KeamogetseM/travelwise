@@ -1,0 +1,47 @@
+{
+  "routes": {
+    "Bangalore->Chennai": 13.25,
+    "Bangalore->Delhi": 8.67,
+    "Bangalore->Hyderabad": 13.42,
+    "Bangalore->Kolkata": 11.92,
+    "Bangalore->Mumbai": 10.67,
+    "Chennai->Bangalore": 12.58,
+    "Chennai->Delhi": 10.0,
+    "Chennai->Hyderabad": 12.17,
+    "Chennai->Kolkata": 12.5,
+    "Chennai->Mumbai": 11.67,
+    "Delhi->Bangalore": 8.92,
+    "Delhi->Chennai": 11.75,
+    "Delhi->Hyderabad": 12.0,
+    "Delhi->Kolkata": 11.75,
+    "Delhi->Mumbai": 8.25,
+    "Hyderabad->Bangalore": 10.75,
+    "Hyderabad->Chennai": 12.08,
+    "Hyderabad->Delhi": 10.67,
+    "Hyderabad->Kolkata": 11.58,
+    "Hyderabad->Mumbai": 11.33,
+    "Kolkata->Bangalore": 12.42,
+    "Kolkata->Chennai": 13.42,
+    "Kolkata->Delhi": 10.83,
+    "Kolkata->Hyderabad": 12.5,
+    "Kolkata->Mumbai": 11.67,
+    "Mumbai->Bangalore": 10.92,
+    "Mumbai->Chennai": 11.75,
+    "Mumbai->Delhi": 8.0,
+    "Mumbai->Hyderabad": 12.5,
+    "Mumbai->Kolkata": 11.83
+  },
+  "cities": [
+    "Bangalore",
+    "Chennai",
+    "Delhi",
+    "Hyderabad",
+    "Kolkata",
+    "Mumbai"
+  ],
+  "classes": [
+    "Business",
+    "Economy"
+  ],
+  "default_duration": 11.25
+}

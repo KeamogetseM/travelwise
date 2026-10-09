@@ -14,18 +14,47 @@ function normalise(value, min, max, invert = false) {
   return invert ? 1 - s : s;
 }
 
-// SIMPLE policy rule for now (Option A): an option is compliant if its
-// cost is within the request's estimated budget. Later this will read
-// the real `policies` table.
-function isCompliant(option, request) {
-  if (!request.estimated_cost) return true; // no budget set -> nothing to breach
-  return option.cost <= Number(request.estimated_cost);
+// A policy's `condition` is a simple predicate: "class=Economy",
+// "destination=Mumbai", or "*" (applies to every request). Keeping this
+// data-driven means adding a new rule is an insert into `policies`, not a
+// code change.
+function policyApplies(policy, request) {
+  if (policy.condition === "*") return true;
+  const [field, value] = policy.condition.split("=");
+  if (field === "class") return request.travel_class === value;
+  if (field === "destination") return request.destination === value;
+  return false; // unrecognised condition -> doesn't apply (safe default)
+}
+
+// Checks an option against the traveller's own declared budget (if any)
+// AND every active policy that applies to this request. Returns the list
+// of violated rule names — empty means fully compliant. `policies` is the
+// active rows from the `policies` table (FR-05: validate against every
+// active policy).
+function isCompliant(option, request, policies = []) {
+  const violations = [];
+
+  if (request.estimated_cost && option.cost > Number(request.estimated_cost)) {
+    violations.push("Exceeds your declared budget");
+  }
+
+  for (const policy of policies) {
+    if (!policyApplies(policy, request)) continue;
+    if (option.cost > Number(policy.threshold)) {
+      violations.push(policy.rule);
+    }
+  }
+
+  return violations;
 }
 
 // Simulated option generation. In a real system these would come from a
 // travel provider; here we derive three plausible options from the request.
+// Prefers the ML-predicted cost as the baseline (FR-03 feeding FR-04);
+// falls back to the traveller's own estimate, then a fixed default, if the
+// prediction service was unavailable when the request was created.
 function generateOptions(request) {
-  const budget = Number(request.estimated_cost) || 5000;
+  const budget = Number(request.predicted_cost) || Number(request.estimated_cost) || 5000;
   return [
     { type: "Rail + hotel",  cost: Math.round(budget * 1.00), duration: 15 },
     { type: "Flight + hotel", cost: Math.round(budget * 1.35), duration: 5 },
@@ -33,7 +62,7 @@ function generateOptions(request) {
   ];
 }
 
-function scoreOptions(request) {
+function scoreOptions(request, policies = []) {
   const options = generateOptions(request);
 
   const costs = options.map((o) => o.cost);
@@ -44,7 +73,8 @@ function scoreOptions(request) {
   const scored = options.map((o) => {
     const costScore = normalise(o.cost, minC, maxC, true);   // cheaper is better
     const timeScore = normalise(o.duration, minT, maxT, true); // faster is better
-    const compliant = isCompliant(o, request);
+    const violations = isCompliant(o, request, policies);
+    const compliant = violations.length === 0;
     const policyScore = compliant ? 1 : 0;
 
     const score =
@@ -55,6 +85,7 @@ function scoreOptions(request) {
     return {
       ...o,
       compliant,
+      violations,
       costScore: +costScore.toFixed(2),
       timeScore: +timeScore.toFixed(2),
       policyScore,
@@ -73,7 +104,11 @@ function scoreOptions(request) {
 // Build a plain-English justification for the recommended option.
 function explain(best, all, request) {
   const parts = [];
-  parts.push(best.compliant ? "fully policy-compliant" : "outside policy");
+  parts.push(
+    best.compliant
+      ? "fully policy-compliant"
+      : `outside policy (${best.violations.join("; ")})`
+  );
 
   const cheapest = Math.min(...all.map((o) => o.cost));
   if (best.cost === cheapest) {
@@ -95,11 +130,15 @@ function explain(best, all, request) {
 
 // Takes raw stored travel_options rows (cost/duration/type/score only — no
 // compliant/reason) and re-derives those presentation fields against the
-// given request, ranked best-first. Used wherever we read back options that
-// were already scored, instead of re-generating and re-inserting them.
-function hydrate(rows, request) {
+// given request and the current active policies, ranked best-first. Used
+// wherever we read back options that were already scored, instead of
+// re-generating and re-inserting them.
+function hydrate(rows, request, policies = []) {
   const scored = rows
-    .map((o) => ({ ...o, compliant: isCompliant(o, request) }))
+    .map((o) => {
+      const violations = isCompliant(o, request, policies);
+      return { ...o, compliant: violations.length === 0, violations };
+    })
     .sort((a, b) => b.score - a.score);
 
   if (scored.length > 0) {

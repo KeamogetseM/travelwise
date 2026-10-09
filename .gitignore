@@ -18,3 +18,11 @@ npm-debug.log*
 .vscode/
 .DS_Store
 Thumbs.db
+
+# ML service: large/regenerable artifacts, not source
+# (dataset is publicly re-downloadable from Kaggle; model is rebuilt via train.py)
+ml-service/data/*.csv
+ml-service/model/*.joblib
+
+# Local tooling: downloaded utility, not project source
+Assignments/tools/plantuml.jar

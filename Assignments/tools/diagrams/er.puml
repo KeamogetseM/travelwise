@@ -1,0 +1,58 @@
+@startuml
+title Entity-Relationship Diagram - TravelWise (Supabase / PostgreSQL, as implemented)
+
+entity "profiles" as profiles {
+  * id : uuid <<PK, = auth.users.id>>
+  --
+  name : text
+  role : text <<check: employee|supervisor|administrator>>
+  created_at : timestamptz
+}
+
+entity "travel_requests" as requests {
+  * id : uuid <<PK>>
+  --
+  user_id : uuid <<FK -> profiles.id>>
+  origin : text
+  destination : text
+  travel_class : text
+  purpose : text
+  start_date : date
+  end_date : date
+  estimated_cost : numeric
+  predicted_cost : numeric
+  status : text <<pending|approved|rejected>>
+  selected_option_id : uuid <<FK -> travel_options.id>>
+  decided_by : uuid <<FK -> profiles.id>>
+  decided_at : timestamptz
+  created_at : timestamptz
+}
+
+entity "travel_options" as options {
+  * id : uuid <<PK>>
+  --
+  request_id : uuid <<FK -> travel_requests.id>>
+  type : text
+  cost : numeric
+  duration : numeric
+  score : numeric
+  created_at : timestamptz
+}
+
+entity "policies" as policies {
+  * id : uuid <<PK>>
+  --
+  rule : text
+  condition : text <<"class=X" | "destination=Y" | "*">>
+  threshold : numeric
+  active : boolean
+  created_at : timestamptz
+}
+
+profiles ||--o{ requests : "raises (user_id)"
+profiles ||--o{ requests : "decides (decided_by)"
+requests ||--|{ options : "generates (request_id)"
+requests }o..o| options : "selects (selected_option_id)"
+options }o..o{ policies : "evaluated against\n(app-level, by condition\nmatch — no FK)"
+
+@enduml
