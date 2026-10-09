@@ -1,0 +1,19 @@
+{
+  "model_version": "20261009-132545",
+  "r2_score": 0.9711,
+  "mean_absolute_error": 2060.37,
+  "train_rows": 240122,
+  "test_rows": 60031,
+  "total_rows": 300153,
+  "features": [
+    "source_city",
+    "destination_city",
+    "class",
+    "duration",
+    "days_left"
+  ],
+  "target": "price",
+  "currency": "INR",
+  "trained_at": "2026-10-09T13:26:04.163783+00:00",
+  "dataset_source": "https://www.kaggle.com/datasets/shubhambathwal/flight-price-prediction"
+}

@@ -66,7 +66,7 @@ export default function App() {
         </div>
       </div>
 
-      {profile?.role === "manager" && (
+      {profile?.role === "supervisor" && (
         <div style={{ display: "flex", gap: 8, margin: "16px 0" }}>
           <button
             onClick={() => setView("mine")}
@@ -97,9 +97,12 @@ export default function App() {
             <div key={r.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, marginBottom: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <strong>{r.destination}</strong> — {r.purpose || "no purpose"}
+                  <strong>{r.origin} → {r.destination}</strong> ({r.travel_class}) — {r.purpose || "no purpose"}
                   <div style={{ fontSize: 13, color: "#555" }}>
-                    R{r.estimated_cost} · {r.status}
+                    {r.predicted_cost != null
+                      ? <>Predicted: R{r.predicted_cost} (your estimate: R{r.estimated_cost ?? "—"})</>
+                      : <>Estimated: R{r.estimated_cost ?? "—"} (prediction unavailable)</>}
+                    {" "}· {r.status}
                   </div>
                 </div>
                 <button onClick={() => handleScore(r.id)}>Score options</button>

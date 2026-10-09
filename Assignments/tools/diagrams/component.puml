@@ -1,0 +1,48 @@
+@startuml
+title Component Diagram - TravelWise (as implemented)
+
+package "client (React/Vite)" {
+  [App.jsx] as AppUI
+  [Auth.jsx]
+  [RequestForm.jsx]
+  [Approvals.jsx]
+  [Recommendation.jsx]
+  [api.js] as ApiClient
+  [supabaseClient.js] as SupaClient
+}
+
+package "server (Node/Express)" {
+  [index.js\n(routes + auth middleware)] as Routes
+  [scoringEngine.js]
+  [mlClient.js]
+  [supabaseClient.js] as SupaServer
+}
+
+package "ml-service (Python/Flask)" {
+  [app.py\n(/predict-cost, /health, /meta)] as MLApp
+  [train.py]
+  [model.joblib]
+  [route_durations.json]
+}
+
+cloud "Supabase" {
+  [Auth]
+  [PostgreSQL]
+}
+
+AppUI --> ApiClient
+AppUI --> SupaClient : session only
+ApiClient --> Routes : REST JSON
+SupaClient --> [Auth]
+
+Routes --> SupaServer
+SupaServer --> [PostgreSQL]
+Routes --> scoringEngine.js
+Routes --> mlClient.js
+mlClient.js --> MLApp : POST /predict-cost
+
+MLApp --> model.joblib : joblib.load()
+MLApp --> route_durations.json : duration lookup
+train.py ..> model.joblib : produces (offline,\nnot at runtime)
+
+@enduml

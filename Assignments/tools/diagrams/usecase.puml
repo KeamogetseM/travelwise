@@ -1,0 +1,44 @@
+@startuml
+title Use-Case Diagram - TravelWise (updated, as implemented)
+
+left to right direction
+
+actor Employee
+actor Supervisor
+actor Administrator
+actor "Cost Prediction\nService (ML model)" as ML
+
+rectangle "TravelWise System" {
+  usecase "Login / Authenticate" as UC1
+  usecase "Submit Travel Request" as UC2
+  usecase "Predict Travel Cost" as UC3
+  usecase "Generate Travel Options" as UC4
+  usecase "Score and Recommend\nOptions" as UC5
+  usecase "Approve or Reject\nRequest" as UC6
+  usecase "View My Requests" as UC7
+}
+
+Employee --> UC1
+Supervisor --> UC1
+Administrator --> UC1
+
+Employee --> UC2
+Employee --> UC7
+UC2 ..> UC3 : <<include>>
+UC2 ..> UC4 : <<include>>
+UC4 ..> UC5 : <<include>>
+UC3 --> ML
+
+Supervisor --> UC5 : reviews
+Supervisor --> UC6
+
+note right of UC6
+  Administrator has no
+  implemented use cases yet
+  (Manage Policies / View
+  Reports are design-only —
+  see traceability matrix,
+  status "Not met").
+end note
+
+@enduml

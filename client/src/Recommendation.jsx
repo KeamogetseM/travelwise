@@ -9,7 +9,7 @@ function Bar({ value }) {
 }
 
 // onApprove: optional (option) => void — when given, renders an "Approve"
-// button per row (used by the manager Approvals view; omitted for the
+// button per row (used by the supervisor Approvals view; omitted for the
 // requester's own read-only view). busy disables the buttons mid-request.
 export default function Recommendation({ result, loading, onApprove, busy }) {
   if (loading) return <p>Scoring options…</p>;
@@ -27,7 +27,9 @@ export default function Recommendation({ result, loading, onApprove, busy }) {
         </div>
         <div style={{ fontSize: 13, color: "#555", margin: "6px 0" }}>
           R{recommendation.cost} · {recommendation.duration}h ·{" "}
-          {recommendation.compliant ? "✅ policy compliant" : "⚠️ over budget"}
+          {recommendation.compliant
+            ? "✅ policy compliant"
+            : `⚠️ ${recommendation.violations?.join("; ") || "policy violation"}`}
         </div>
         <div style={{ fontSize: 13 }}>{recommendation.reason}</div>
       </div>
@@ -50,7 +52,7 @@ export default function Recommendation({ result, loading, onApprove, busy }) {
               <td style={{ padding: 6 }}>{o.type}</td>
               <td style={{ padding: 6 }}>R{o.cost}</td>
               <td style={{ padding: 6 }}>{o.duration}h</td>
-              <td style={{ padding: 6 }}>{o.compliant ? "✅" : "⚠️"}</td>
+              <td style={{ padding: 6 }} title={o.violations?.join("; ") || ""}>{o.compliant ? "✅" : "⚠️"}</td>
               <td style={{ padding: 6, display: "flex", alignItems: "center", gap: 8 }}>
                 <Bar value={o.score} /> {o.score.toFixed(2)}
               </td>

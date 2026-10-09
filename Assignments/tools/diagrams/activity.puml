@@ -1,0 +1,46 @@
+@startuml
+title Activity Diagram - End-to-End Travel Request Workflow (as implemented)
+
+start
+:Employee submits travel request\n(origin, destination, class, dates);
+if (Input valid?) then (no)
+  :Show validation error;
+  stop
+else (yes)
+  :Save request (status = pending);
+endif
+
+:Call Cost Prediction Service\n(Random Forest ML model);
+note right
+  Emerging-technology step.
+  Non-fatal: on failure the
+  request keeps status=pending
+  and predicted_cost stays null.
+end note
+if (Prediction succeeded?) then (yes)
+  :Store predicted_cost on request;
+else (no)
+  :Continue without predicted_cost\n(fallback to estimated_cost later);
+endif
+
+:Supervisor opens Approvals queue;
+if (Options already scored?) then (no)
+  :Generate >= 3 travel options\n(baseline = predicted_cost or estimated_cost);
+  :Score options (weighted model);
+  :Persist options + scores;
+else (yes)
+endif
+
+:Supervisor reviews ranked options;
+if (Supervisor decision?) then (approve)
+  :Update status = approved;
+  :Record selected_option_id,\ndecided_by, decided_at;
+else (reject)
+  :Update status = rejected;
+  :Record decided_by, decided_at;
+endif
+
+:Employee sees updated status\nin their own request list;
+stop
+
+@enduml

@@ -19,10 +19,10 @@ function DecidedCard({ r }) {
   return (
     <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, marginBottom: 12 }}>
       <div>
-        <strong>{r.destination}</strong> — {r.purpose || "no purpose"}
+        <strong>{r.origin} → {r.destination}</strong> ({r.travel_class}) — {r.purpose || "no purpose"}
       </div>
       <div style={{ fontSize: 13, color: "#555", margin: "6px 0" }}>
-        {r.requester_name || "unknown requester"} · R{r.estimated_cost} · {r.start_date} to {r.end_date}
+        {r.requester_name || "unknown requester"} · Predicted: R{r.predicted_cost ?? "—"} · {r.start_date} to {r.end_date}
       </div>
       <div style={{ fontSize: 13 }}>
         {r.status === "approved" ? "✅ Approved" : "⚠️ Rejected"} by {r.decider_name || "unknown"} on{" "}
@@ -37,8 +37,8 @@ function DecidedCard({ r }) {
   );
 }
 
-// Manager view: pending requests across all users (score, then approve one
-// option or reject), plus tabs to review past approve/reject decisions.
+// Supervisor view: pending requests across all users (score, then approve
+// one option or reject), plus tabs to review past approve/reject decisions.
 export default function Approvals() {
   const [tab, setTab] = useState("pending");
   const [requests, setRequests] = useState([]);
@@ -119,9 +119,9 @@ export default function Approvals() {
             <div key={r.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, marginBottom: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <strong>{r.destination}</strong> — {r.purpose || "no purpose"}
+                  <strong>{r.origin} → {r.destination}</strong> ({r.travel_class}) — {r.purpose || "no purpose"}
                   <div style={{ fontSize: 13, color: "#555" }}>
-                    {r.requester_name || "unknown requester"} · R{r.estimated_cost} · {r.start_date} to{" "}
+                    {r.requester_name || "unknown requester"} · Predicted: R{r.predicted_cost ?? "—"} · {r.start_date} to{" "}
                     {r.end_date}
                   </div>
                 </div>

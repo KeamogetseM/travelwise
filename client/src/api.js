@@ -43,7 +43,7 @@ export function getMe() {
   return request("/me");
 }
 
-// Manager approvals
+// Supervisor approvals
 export function getApprovals(status = "pending") {
   return request(`/approvals?status=${status}`);
 }

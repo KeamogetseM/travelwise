@@ -1,0 +1,43 @@
+@startuml
+title Architecture Diagram - TravelWise (as implemented)
+
+skinparam componentStyle rectangle
+
+actor "Employee /\nSupervisor" as User
+
+package "Presentation Tier" {
+  [React SPA (Vite)] as UI
+}
+
+package "Application Tier" {
+  [Node.js / Express API] as API
+  [Scoring Engine\n(rule-based)] as Scoring
+}
+
+package "Emerging Technology Tier" {
+  [Python / Flask\nCost Prediction Service] as ML
+  database "model.joblib\n(Random Forest)" as Model
+}
+
+package "Data Tier (Cloud)" {
+  database "Supabase\n(PostgreSQL + Auth)" as DB
+}
+
+User --> UI : HTTPS (browser)
+UI --> API : REST JSON\n/api/*
+API --> DB : REST (service role)
+API --> Scoring : generate + score options
+API --> ML : POST /predict-cost
+ML --> Model : load / predict
+UI ..> DB : Auth only\n(publishable key)
+
+note right of ML
+  Currently runs as a local
+  process (localhost:8000).
+  Cloud deployment (Render)
+  is a planned, not yet
+  completed, target — see
+  Limitations (5.4).
+end note
+
+@enduml
