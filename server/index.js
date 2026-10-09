@@ -348,6 +348,13 @@ app.post("/api/travel-requests/:id/reject", requireAuth, requireRole("supervisor
   res.json({ message: "Request rejected", request: updated });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// Only bind a port when run directly (`node index.js` / nodemon), not when
+// required as a module — lets integration tests import `app` and drive it
+// in-process via supertest without a real listening server.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;

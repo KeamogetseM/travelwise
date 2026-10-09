@@ -26,3 +26,8 @@ ml-service/model/*.joblib
 
 # Local tooling: downloaded utility, not project source
 Assignments/tools/plantuml.jar
+
+# Python test/cache artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
