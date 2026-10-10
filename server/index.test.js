@@ -243,3 +243,78 @@ describe("policy engine", () => {
     }
   });
 });
+
+describe("policy management (administrator)", () => {
+  let administrator, nonAdmin, policyId;
+
+  beforeAll(async () => {
+    administrator = await makeUser("it-policyadmin", "administrator");
+    nonAdmin = await makeUser("it-policyadmin-emp", null);
+  });
+
+  afterAll(async () => {
+    if (policyId) await admin.from("policies").delete().eq("id", policyId);
+    await deleteUser(administrator);
+    await deleteUser(nonAdmin);
+  });
+
+  test("a non-administrator is denied access to policy management", async () => {
+    await request(app).get("/api/policies").set("Authorization", `Bearer ${nonAdmin.token}`).expect(403);
+    await request(app)
+      .post("/api/policies")
+      .set("Authorization", `Bearer ${nonAdmin.token}`)
+      .send({ rule: "x", condition: "*", threshold: 1 })
+      .expect(403);
+  });
+
+  test("an administrator can create a policy with a valid condition", async () => {
+    const res = await request(app)
+      .post("/api/policies")
+      .set("Authorization", `Bearer ${administrator.token}`)
+      .send({ rule: "__it_policy_test__", condition: "class=Economy", threshold: 1234 })
+      .expect(201);
+
+    expect(res.body.policy.active).toBe(true);
+    policyId = res.body.policy.id;
+  });
+
+  test("rejects an invalid condition format", async () => {
+    const res = await request(app)
+      .post("/api/policies")
+      .set("Authorization", `Bearer ${administrator.token}`)
+      .send({ rule: "bad", condition: "not-a-valid-condition", threshold: 100 })
+      .expect(400);
+    expect(res.body.error).toMatch(/condition must be/i);
+  });
+
+  test("the new policy appears in the administrator's list", async () => {
+    const res = await request(app)
+      .get("/api/policies")
+      .set("Authorization", `Bearer ${administrator.token}`)
+      .expect(200);
+    expect(res.body.policies.some((p) => p.id === policyId)).toBe(true);
+  });
+
+  test("can deactivate a policy via PATCH", async () => {
+    const res = await request(app)
+      .patch(`/api/policies/${policyId}`)
+      .set("Authorization", `Bearer ${administrator.token}`)
+      .send({ active: false })
+      .expect(200);
+    expect(res.body.policy.active).toBe(false);
+  });
+
+  test("can delete a policy", async () => {
+    await request(app)
+      .delete(`/api/policies/${policyId}`)
+      .set("Authorization", `Bearer ${administrator.token}`)
+      .expect(200);
+
+    const res = await request(app)
+      .get("/api/policies")
+      .set("Authorization", `Bearer ${administrator.token}`)
+      .expect(200);
+    expect(res.body.policies.some((p) => p.id === policyId)).toBe(false);
+    policyId = null; // already gone, nothing for afterAll to clean up
+  });
+});

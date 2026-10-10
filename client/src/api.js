@@ -58,3 +58,26 @@ export function approveTravelRequest(id, optionId) {
 export function rejectTravelRequest(id) {
   return request(`/travel-requests/${id}/reject`, { method: "POST" });
 }
+
+// Administrator policy management
+export function getPolicies() {
+  return request("/policies");
+}
+
+export function createPolicy(payload) {
+  return request("/policies", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updatePolicy(id, payload) {
+  return request(`/policies/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deletePolicy(id) {
+  return request(`/policies/${id}`, { method: "DELETE" });
+}

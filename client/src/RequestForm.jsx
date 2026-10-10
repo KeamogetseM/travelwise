@@ -1,12 +1,6 @@
 import { useState } from "react";
 import { createTravelRequest } from "./api";
-
-// The cost-prediction model was trained only on these routes/classes
-// (Kaggle "Flight Price Prediction" dataset covers India's 6 metro cities),
-// so origin/destination/class are constrained to what it can meaningfully
-// predict rather than left as free text.
-const CITIES = ["Bangalore", "Chennai", "Delhi", "Hyderabad", "Kolkata", "Mumbai"];
-const CLASSES = ["Economy", "Business"];
+import { CITIES, CLASSES } from "./constants";
 
 const empty = {
   origin: CITIES[0],

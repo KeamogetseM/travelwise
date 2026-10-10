@@ -348,6 +348,98 @@ app.post("/api/travel-requests/:id/reject", requireAuth, requireRole("supervisor
   res.json({ message: "Request rejected", request: updated });
 });
 
+// A condition must be "*" (applies to everything) or "field=value" where
+// field is one scoringEngine.js's policyApplies() actually understands.
+function isValidCondition(condition) {
+  if (condition === "*") return true;
+  const [field, value] = String(condition).split("=");
+  return (field === "class" || field === "destination") && !!value;
+}
+
+// List every policy (active and inactive) — administrator only, so the
+// admin UI can show the full set, not just what scoring currently uses.
+app.get("/api/policies", requireAuth, requireRole("administrator"), async (req, res) => {
+  const { data, error } = await supabase
+    .from("policies")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+  res.json({ count: data.length, policies: data });
+});
+
+// Create a new policy rule.
+app.post("/api/policies", requireAuth, requireRole("administrator"), async (req, res) => {
+  const { rule, condition, threshold } = req.body;
+
+  if (!rule || !condition || threshold === undefined || threshold === null) {
+    return res.status(400).json({ error: "rule, condition and threshold are required" });
+  }
+  if (!isValidCondition(condition)) {
+    return res.status(400).json({ error: 'condition must be "*", "class=<value>" or "destination=<value>"' });
+  }
+  if (!(Number(threshold) > 0)) {
+    return res.status(400).json({ error: "threshold must be a positive number" });
+  }
+
+  const { data, error } = await supabase
+    .from("policies")
+    .insert([{ rule, condition, threshold: Number(threshold), active: true }])
+    .select()
+    .single();
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+  res.status(201).json({ message: "Policy created", policy: data });
+});
+
+// Update a policy — any subset of rule/condition/threshold/active.
+app.patch("/api/policies/:id", requireAuth, requireRole("administrator"), async (req, res) => {
+  const { id } = req.params;
+  const { rule, condition, threshold, active } = req.body;
+
+  if (condition !== undefined && !isValidCondition(condition)) {
+    return res.status(400).json({ error: 'condition must be "*", "class=<value>" or "destination=<value>"' });
+  }
+  if (threshold !== undefined && !(Number(threshold) > 0)) {
+    return res.status(400).json({ error: "threshold must be a positive number" });
+  }
+
+  const updates = {};
+  if (rule !== undefined) updates.rule = rule;
+  if (condition !== undefined) updates.condition = condition;
+  if (threshold !== undefined) updates.threshold = Number(threshold);
+  if (active !== undefined) updates.active = !!active;
+
+  const { data, error } = await supabase
+    .from("policies")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error || !data) {
+    return res.status(404).json({ error: "Policy not found" });
+  }
+  res.json({ message: "Policy updated", policy: data });
+});
+
+// Delete a policy. Safe to do even for a rule already used in past
+// scoring runs — violations are stored as a name snapshot (text), not a
+// foreign key, so this only affects future scoring.
+app.delete("/api/policies/:id", requireAuth, requireRole("administrator"), async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabase.from("policies").delete().eq("id", id);
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+  res.json({ message: "Policy deleted" });
+});
+
 // Only bind a port when run directly (`node index.js` / nodemon), not when
 // required as a module — lets integration tests import `app` and drive it
 // in-process via supertest without a real listening server.
