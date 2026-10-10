@@ -48,15 +48,18 @@ export function getApprovals(status = "pending") {
   return request(`/approvals?status=${status}`);
 }
 
-export function approveTravelRequest(id, optionId) {
+export function approveTravelRequest(id, optionId, comment) {
   return request(`/travel-requests/${id}/approve`, {
     method: "POST",
-    body: JSON.stringify({ option_id: optionId }),
+    body: JSON.stringify({ option_id: optionId, comment }),
   });
 }
 
-export function rejectTravelRequest(id) {
-  return request(`/travel-requests/${id}/reject`, { method: "POST" });
+export function rejectTravelRequest(id, comment) {
+  return request(`/travel-requests/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ comment }),
+  });
 }
 
 // Administrator policy management
