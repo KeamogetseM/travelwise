@@ -22,6 +22,10 @@ async function makeUser(prefix, role) {
 }
 
 async function deleteUser(user) {
+  // audit_log.user_id and approvals.approver_id both reference profiles(id)
+  // with the default RESTRICT behavior, so these must go first.
+  await admin.from("audit_log").delete().eq("user_id", user.id);
+  await admin.from("approvals").delete().eq("approver_id", user.id);
   await admin.from("profiles").delete().eq("id", user.id);
   await admin.auth.admin.deleteUser(user.id);
 }
@@ -155,6 +159,10 @@ describe("supervisor approvals", () => {
   });
 
   afterAll(async () => {
+    // approvals.option_id/request_id both reference travel_options/travel_requests
+    // with RESTRICT, so the approval row (created by the approve test below)
+    // must be removed before either of those.
+    await admin.from("approvals").delete().eq("request_id", requestId);
     await admin.from("travel_options").delete().eq("request_id", requestId);
     await admin.from("travel_requests").delete().eq("id", requestId);
     await deleteUser(employee);
@@ -177,7 +185,7 @@ describe("supervisor approvals", () => {
     expect(res.body.requests.some((r) => r.id === requestId)).toBe(true);
   });
 
-  test("approving records the decision, chosen option, and an optional comment", async () => {
+  test("approving records a real Approval row with the chosen option and an optional comment", async () => {
     const res = await request(app)
       .post(`/api/travel-requests/${requestId}/approve`)
       .set("Authorization", `Bearer ${supervisor.token}`)
@@ -185,10 +193,12 @@ describe("supervisor approvals", () => {
       .expect(200);
 
     expect(res.body.request.status).toBe("approved");
-    expect(res.body.request.selected_option_id).toBe(topOptionId);
-    expect(res.body.request.decided_by).toBe(supervisor.id);
-    expect(res.body.request.decided_at).toEqual(expect.any(String));
-    expect(res.body.request.decision_comment).toBe("Looks reasonable, approved.");
+    expect(res.body.approval.request_id).toBe(requestId);
+    expect(res.body.approval.option_id).toBe(topOptionId);
+    expect(res.body.approval.status).toBe("approved");
+    expect(res.body.approval.approver_id).toBe(supervisor.id);
+    expect(res.body.approval.decision_date).toEqual(expect.any(String));
+    expect(res.body.approval.comment).toBe("Looks reasonable, approved.");
   });
 
   test("approving an already-decided request is rejected", async () => {
@@ -216,6 +226,7 @@ describe("rejecting with a required comment", () => {
   });
 
   afterAll(async () => {
+    await admin.from("approvals").delete().eq("request_id", requestId);
     await admin.from("travel_options").delete().eq("request_id", requestId);
     await admin.from("travel_requests").delete().eq("id", requestId);
     await deleteUser(employee);
@@ -231,7 +242,7 @@ describe("rejecting with a required comment", () => {
     expect(res.body.error).toMatch(/comment/i);
   });
 
-  test("rejecting with a comment records it", async () => {
+  test("rejecting with a comment records a real Approval row", async () => {
     const res = await request(app)
       .post(`/api/travel-requests/${requestId}/reject`)
       .set("Authorization", `Bearer ${supervisor.token}`)
@@ -239,7 +250,9 @@ describe("rejecting with a required comment", () => {
       .expect(200);
 
     expect(res.body.request.status).toBe("rejected");
-    expect(res.body.request.decision_comment).toBe("Over budget for this quarter.");
+    expect(res.body.approval.status).toBe("rejected");
+    expect(res.body.approval.option_id).toBeNull();
+    expect(res.body.approval.comment).toBe("Over budget for this quarter.");
   });
 });
 
@@ -359,5 +372,69 @@ describe("policy management (administrator)", () => {
       .expect(200);
     expect(res.body.policies.some((p) => p.id === policyId)).toBe(false);
     policyId = null; // already gone, nothing for afterAll to clean up
+  });
+});
+
+describe("Approval and AuditLog as real entities", () => {
+  let employee, supervisor, requestId, topOptionId;
+
+  beforeAll(async () => {
+    employee = await makeUser("it-entities-emp", null);
+    supervisor = await makeUser("it-entities-sup", "supervisor");
+
+    const created = await request(app)
+      .post("/api/travel-requests")
+      .set("Authorization", `Bearer ${employee.token}`)
+      .send(sampleRequest);
+    requestId = created.body.request.id;
+
+    const scored = await request(app)
+      .post(`/api/travel-requests/${requestId}/score`)
+      .set("Authorization", `Bearer ${supervisor.token}`);
+    topOptionId = scored.body.recommendation.id;
+
+    await request(app)
+      .post(`/api/travel-requests/${requestId}/approve`)
+      .set("Authorization", `Bearer ${supervisor.token}`)
+      .send({ option_id: topOptionId, comment: "Approved for the AuditLog test." });
+  });
+
+  afterAll(async () => {
+    await admin.from("approvals").delete().eq("request_id", requestId);
+    await admin.from("travel_options").delete().eq("request_id", requestId);
+    await admin.from("travel_requests").delete().eq("id", requestId);
+    await deleteUser(employee);
+    await deleteUser(supervisor);
+  });
+
+  test("the request's own owner can see the decision and comment on their own list", async () => {
+    const res = await request(app)
+      .get("/api/travel-requests")
+      .set("Authorization", `Bearer ${employee.token}`)
+      .expect(200);
+
+    const own = res.body.requests.find((r) => r.id === requestId);
+    expect(own.status).toBe("approved");
+    expect(own.selected_option_id).toBe(topOptionId);
+    expect(own.decision_comment).toBe("Approved for the AuditLog test.");
+    expect(own.decided_at).toEqual(expect.any(String));
+  });
+
+  test("a real approvals row exists, independent of the request row", async () => {
+    const { data } = await admin.from("approvals").select("*").eq("request_id", requestId).single();
+    expect(data.status).toBe("approved");
+    expect(data.approver_id).toBe(supervisor.id);
+  });
+
+  test("significant actions are written to audit_log", async () => {
+    const { data } = await admin
+      .from("audit_log")
+      .select("action, user_id")
+      .in("user_id", [employee.id, supervisor.id]);
+
+    const actions = data.map((r) => r.action);
+    expect(actions).toContain("create_request");
+    expect(actions).toContain("score_request");
+    expect(actions).toContain("approve_request");
   });
 });
