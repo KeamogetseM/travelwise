@@ -54,6 +54,15 @@ function requireRole(...allowedRoles) {
   };
 }
 
+// Records a significant action (FR-09). Best-effort: a logging failure
+// never blocks the action itself from completing.
+async function logAction(userId, action, details) {
+  const { error } = await supabase.from("audit_log").insert([{ user_id: userId, action, details }]);
+  if (error) {
+    console.warn("Audit log write failed:", error.message);
+  }
+}
+
 // Health check
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "TravelWise API is running" });
@@ -132,21 +141,36 @@ app.post("/api/travel-requests", requireAuth, async (req, res) => {
     }
   }
 
+  await logAction(req.user.id, "create_request", `Created travel request ${request.id} (${origin} -> ${destination})`);
+
   res.status(201).json({ message: "Travel request created", request });
 });
 
-// List the signed-in user's travel requests (newest first)
+// List the signed-in user's travel requests (newest first) — includes the
+// decision (comment, decider, when) once one exists, so a requester can see
+// why their own request was approved/rejected.
 app.get("/api/travel-requests", requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from("travel_requests")
-    .select("*")
+    .select("*, approvals(*)")
     .eq("user_id", req.user.id)
     .order("created_at", { ascending: false });
 
   if (error) {
     return res.status(500).json({ error: error.message });
   }
-  res.json({ count: data.length, requests: data });
+
+  const requests = data.map(({ approvals, ...request }) => {
+    const decision = approvals?.[0];
+    return {
+      ...request,
+      selected_option_id: decision?.option_id ?? null,
+      decision_comment: decision?.comment ?? null,
+      decided_at: decision?.decision_date ?? null,
+    };
+  });
+
+  res.json({ count: requests.length, requests });
 });
 
 // Generate + score options for a request, store them, return recommendation.
@@ -216,6 +240,8 @@ app.post("/api/travel-requests/:id/score", requireAuth, async (req, res) => {
     scored = hydrate(inserted, request, policies);
   }
 
+  await logAction(req.user.id, "score_request", `Scored travel request ${id}`);
+
   // 3. Return ranked options + the recommended one
   res.json({
     request_id: id,
@@ -225,7 +251,8 @@ app.post("/api/travel-requests/:id/score", requireAuth, async (req, res) => {
 });
 
 // Requests across all users, for a supervisor to review — includes the
-// requester's name, the decider's name (once decided), and any options
+// requester's name, the decision (decider name, when, comment, chosen
+// option — once one exists, via the real approvals table), and any options
 // already scored for that request. Defaults to the pending queue;
 // ?status=approved or ?status=rejected reviews past decisions.
 app.get("/api/approvals", requireAuth, requireRole("supervisor"), async (req, res) => {
@@ -236,7 +263,7 @@ app.get("/api/approvals", requireAuth, requireRole("supervisor"), async (req, re
   const { data, error } = await supabase
     .from("travel_requests")
     .select(
-      "*, requester:profiles!travel_requests_user_id_fkey(name), decider:profiles!travel_requests_decided_by_fkey(name), travel_options!travel_options_request_id_fkey(*)"
+      "*, requester:profiles!travel_requests_user_id_fkey(name), travel_options!travel_options_request_id_fkey(*), approvals(*, decider:profiles(name))"
     )
     .eq("status", status)
     .order("created_at", { ascending: false });
@@ -253,17 +280,24 @@ app.get("/api/approvals", requireAuth, requireRole("supervisor"), async (req, re
     return res.status(500).json({ error: policiesErr.message });
   }
 
-  const requests = data.map(({ requester, decider, travel_options, ...request }) => ({
-    ...request,
-    requester_name: requester?.name || null,
-    decider_name: decider?.name || null,
-    options: travel_options.length > 0 ? hydrate(travel_options, request, policies) : [],
-  }));
+  const requests = data.map(({ requester, travel_options, approvals, ...request }) => {
+    const decision = approvals?.[0];
+    return {
+      ...request,
+      requester_name: requester?.name || null,
+      decider_name: decision?.decider?.name || null,
+      decided_at: decision?.decision_date || null,
+      decision_comment: decision?.comment || null,
+      selected_option_id: decision?.option_id || null,
+      options: travel_options.length > 0 ? hydrate(travel_options, request, policies) : [],
+    };
+  });
 
   res.json({ count: requests.length, requests });
 });
 
-// Approve a request: pick one of its scored options and record the decision.
+// Approve a request: pick one of its scored options and record the decision
+// as a real Approval row (not just a status flip).
 app.post("/api/travel-requests/:id/approve", requireAuth, requireRole("supervisor"), async (req, res) => {
   const { id } = req.params;
   const { option_id, comment } = req.body;
@@ -296,23 +330,28 @@ app.post("/api/travel-requests/:id/approve", requireAuth, requireRole("superviso
     return res.status(400).json({ error: "option_id does not belong to this request" });
   }
 
+  const { data: approval, error: apprErr } = await supabase
+    .from("approvals")
+    .insert([{ request_id: id, option_id, status: "approved", comment: comment || null, approver_id: req.user.id }])
+    .select()
+    .single();
+  if (apprErr) {
+    return res.status(500).json({ error: apprErr.message });
+  }
+
   const { data: updated, error: updErr } = await supabase
     .from("travel_requests")
-    .update({
-      status: "approved",
-      selected_option_id: option_id,
-      decided_by: req.user.id,
-      decided_at: new Date().toISOString(),
-      decision_comment: comment || null,
-    })
+    .update({ status: "approved" })
     .eq("id", id)
     .select()
     .single();
-
   if (updErr) {
     return res.status(500).json({ error: updErr.message });
   }
-  res.json({ message: "Request approved", request: updated });
+
+  await logAction(req.user.id, "approve_request", `Approved request ${id} (option ${option_id})`);
+
+  res.json({ message: "Request approved", request: updated, approval });
 });
 
 // Reject a request outright — no option is selected. A comment explaining
@@ -338,22 +377,28 @@ app.post("/api/travel-requests/:id/reject", requireAuth, requireRole("supervisor
     return res.status(400).json({ error: `Request is already ${request.status}` });
   }
 
+  const { data: approval, error: apprErr } = await supabase
+    .from("approvals")
+    .insert([{ request_id: id, option_id: null, status: "rejected", comment: comment.trim(), approver_id: req.user.id }])
+    .select()
+    .single();
+  if (apprErr) {
+    return res.status(500).json({ error: apprErr.message });
+  }
+
   const { data: updated, error: updErr } = await supabase
     .from("travel_requests")
-    .update({
-      status: "rejected",
-      decided_by: req.user.id,
-      decided_at: new Date().toISOString(),
-      decision_comment: comment.trim(),
-    })
+    .update({ status: "rejected" })
     .eq("id", id)
     .select()
     .single();
-
   if (updErr) {
     return res.status(500).json({ error: updErr.message });
   }
-  res.json({ message: "Request rejected", request: updated });
+
+  await logAction(req.user.id, "reject_request", `Rejected request ${id}: ${comment.trim()}`);
+
+  res.json({ message: "Request rejected", request: updated, approval });
 });
 
 // A condition must be "*" (applies to everything) or "field=value" where
@@ -401,6 +446,9 @@ app.post("/api/policies", requireAuth, requireRole("administrator"), async (req,
   if (error) {
     return res.status(500).json({ error: error.message });
   }
+
+  await logAction(req.user.id, "create_policy", `Created policy "${data.rule}" (${data.condition}, max R${data.threshold})`);
+
   res.status(201).json({ message: "Policy created", policy: data });
 });
 
@@ -432,6 +480,9 @@ app.patch("/api/policies/:id", requireAuth, requireRole("administrator"), async 
   if (error || !data) {
     return res.status(404).json({ error: "Policy not found" });
   }
+
+  await logAction(req.user.id, "update_policy", `Updated policy ${id}: ${JSON.stringify(updates)}`);
+
   res.json({ message: "Policy updated", policy: data });
 });
 
@@ -445,6 +496,9 @@ app.delete("/api/policies/:id", requireAuth, requireRole("administrator"), async
   if (error) {
     return res.status(500).json({ error: error.message });
   }
+
+  await logAction(req.user.id, "delete_policy", `Deleted policy ${id}`);
+
   res.json({ message: "Policy deleted" });
 });
 

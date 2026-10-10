@@ -117,6 +117,11 @@ export default function App() {
                       : <>Estimated: R{r.estimated_cost ?? "—"} (prediction unavailable)</>}
                     {" "}· {r.status}
                   </div>
+                  {r.decision_comment && (
+                    <div style={{ fontSize: 13, fontStyle: "italic", color: "#555", marginTop: 4 }}>
+                      {r.status === "approved" ? "Approved" : "Rejected"}: “{r.decision_comment}”
+                    </div>
+                  )}
                 </div>
                 <button onClick={() => handleScore(r.id)}>Score options</button>
               </div>
