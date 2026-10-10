@@ -4,6 +4,7 @@ import { supabase } from "./supabaseClient";
 import RequestForm from "./RequestForm";
 import Recommendation from "./Recommendation";
 import Approvals from "./Approvals";
+import Policies from "./Policies";
 import Auth from "./Auth";
 
 export default function App() {
@@ -66,7 +67,7 @@ export default function App() {
         </div>
       </div>
 
-      {profile?.role === "supervisor" && (
+      {(profile?.role === "supervisor" || profile?.role === "administrator") && (
         <div style={{ display: "flex", gap: 8, margin: "16px 0" }}>
           <button
             onClick={() => setView("mine")}
@@ -74,17 +75,29 @@ export default function App() {
           >
             My requests
           </button>
-          <button
-            onClick={() => setView("approvals")}
-            style={{ fontWeight: view === "approvals" ? 700 : 400 }}
-          >
-            Approvals
-          </button>
+          {profile.role === "supervisor" && (
+            <button
+              onClick={() => setView("approvals")}
+              style={{ fontWeight: view === "approvals" ? 700 : 400 }}
+            >
+              Approvals
+            </button>
+          )}
+          {profile.role === "administrator" && (
+            <button
+              onClick={() => setView("policies")}
+              style={{ fontWeight: view === "policies" ? 700 : 400 }}
+            >
+              Policies
+            </button>
+          )}
         </div>
       )}
 
       {view === "approvals" ? (
         <Approvals />
+      ) : view === "policies" ? (
+        <Policies />
       ) : (
         <>
           <RequestForm onCreated={loadRequests} />
