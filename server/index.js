@@ -266,7 +266,7 @@ app.get("/api/approvals", requireAuth, requireRole("supervisor"), async (req, re
 // Approve a request: pick one of its scored options and record the decision.
 app.post("/api/travel-requests/:id/approve", requireAuth, requireRole("supervisor"), async (req, res) => {
   const { id } = req.params;
-  const { option_id } = req.body;
+  const { option_id, comment } = req.body;
 
   if (!option_id) {
     return res.status(400).json({ error: "option_id is required" });
@@ -303,6 +303,7 @@ app.post("/api/travel-requests/:id/approve", requireAuth, requireRole("superviso
       selected_option_id: option_id,
       decided_by: req.user.id,
       decided_at: new Date().toISOString(),
+      decision_comment: comment || null,
     })
     .eq("id", id)
     .select()
@@ -314,9 +315,15 @@ app.post("/api/travel-requests/:id/approve", requireAuth, requireRole("superviso
   res.json({ message: "Request approved", request: updated });
 });
 
-// Reject a request outright — no option is selected.
+// Reject a request outright — no option is selected. A comment explaining
+// why is required (FR-08), unlike approval where it's optional.
 app.post("/api/travel-requests/:id/reject", requireAuth, requireRole("supervisor"), async (req, res) => {
   const { id } = req.params;
+  const { comment } = req.body;
+
+  if (!comment || !comment.trim()) {
+    return res.status(400).json({ error: "A comment explaining the rejection is required" });
+  }
 
   const { data: request, error: reqErr } = await supabase
     .from("travel_requests")
@@ -337,6 +344,7 @@ app.post("/api/travel-requests/:id/reject", requireAuth, requireRole("supervisor
       status: "rejected",
       decided_by: req.user.id,
       decided_at: new Date().toISOString(),
+      decision_comment: comment.trim(),
     })
     .eq("id", id)
     .select()

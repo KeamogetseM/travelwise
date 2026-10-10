@@ -177,17 +177,18 @@ describe("supervisor approvals", () => {
     expect(res.body.requests.some((r) => r.id === requestId)).toBe(true);
   });
 
-  test("approving records the decision and the chosen option", async () => {
+  test("approving records the decision, chosen option, and an optional comment", async () => {
     const res = await request(app)
       .post(`/api/travel-requests/${requestId}/approve`)
       .set("Authorization", `Bearer ${supervisor.token}`)
-      .send({ option_id: topOptionId })
+      .send({ option_id: topOptionId, comment: "Looks reasonable, approved." })
       .expect(200);
 
     expect(res.body.request.status).toBe("approved");
     expect(res.body.request.selected_option_id).toBe(topOptionId);
     expect(res.body.request.decided_by).toBe(supervisor.id);
     expect(res.body.request.decided_at).toEqual(expect.any(String));
+    expect(res.body.request.decision_comment).toBe("Looks reasonable, approved.");
   });
 
   test("approving an already-decided request is rejected", async () => {
@@ -197,6 +198,48 @@ describe("supervisor approvals", () => {
       .send({ option_id: topOptionId })
       .expect(400);
     expect(res.body.error).toMatch(/already/i);
+  });
+});
+
+describe("rejecting with a required comment", () => {
+  let employee, supervisor, requestId;
+
+  beforeAll(async () => {
+    employee = await makeUser("it-reject-emp", null);
+    supervisor = await makeUser("it-reject-sup", "supervisor");
+
+    const created = await request(app)
+      .post("/api/travel-requests")
+      .set("Authorization", `Bearer ${employee.token}`)
+      .send(sampleRequest);
+    requestId = created.body.request.id;
+  });
+
+  afterAll(async () => {
+    await admin.from("travel_options").delete().eq("request_id", requestId);
+    await admin.from("travel_requests").delete().eq("id", requestId);
+    await deleteUser(employee);
+    await deleteUser(supervisor);
+  });
+
+  test("rejecting without a comment is refused", async () => {
+    const res = await request(app)
+      .post(`/api/travel-requests/${requestId}/reject`)
+      .set("Authorization", `Bearer ${supervisor.token}`)
+      .send({})
+      .expect(400);
+    expect(res.body.error).toMatch(/comment/i);
+  });
+
+  test("rejecting with a comment records it", async () => {
+    const res = await request(app)
+      .post(`/api/travel-requests/${requestId}/reject`)
+      .set("Authorization", `Bearer ${supervisor.token}`)
+      .send({ comment: "Over budget for this quarter." })
+      .expect(200);
+
+    expect(res.body.request.status).toBe("rejected");
+    expect(res.body.request.decision_comment).toBe("Over budget for this quarter.");
   });
 });
 

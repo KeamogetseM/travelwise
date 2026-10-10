@@ -33,6 +33,11 @@ function DecidedCard({ r }) {
           Selected: <strong>{selected.type}</strong> — R{selected.cost} · {selected.duration}h
         </div>
       )}
+      {r.decision_comment && (
+        <div style={{ fontSize: 13, marginTop: 6, fontStyle: "italic", color: "#555" }}>
+          “{r.decision_comment}”
+        </div>
+      )}
     </div>
   );
 }
@@ -44,6 +49,7 @@ export default function Approvals() {
   const [requests, setRequests] = useState([]);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null); // request currently being acted on
+  const [comments, setComments] = useState({}); // request id -> draft comment text
 
   function load(status) {
     getApprovals(status)
@@ -54,6 +60,10 @@ export default function Approvals() {
   useEffect(() => {
     load(tab);
   }, [tab]);
+
+  function setComment(id, value) {
+    setComments((c) => ({ ...c, [id]: value }));
+  }
 
   async function handleScore(id) {
     setError(null);
@@ -72,7 +82,7 @@ export default function Approvals() {
     setError(null);
     setBusyId(id);
     try {
-      await approveTravelRequest(id, option.id);
+      await approveTravelRequest(id, option.id, comments[id]);
       setRequests((rs) => rs.filter((r) => r.id !== id)); // no longer pending
     } catch (err) {
       setError(err.message);
@@ -85,7 +95,7 @@ export default function Approvals() {
     setError(null);
     setBusyId(id);
     try {
-      await rejectTravelRequest(id);
+      await rejectTravelRequest(id, comments[id]);
       setRequests((rs) => rs.filter((r) => r.id !== id));
     } catch (err) {
       setError(err.message);
@@ -115,37 +125,49 @@ export default function Approvals() {
 
       {tab !== "pending"
         ? requests.map((r) => <DecidedCard key={r.id} r={r} />)
-        : requests.map((r) => (
-            <div key={r.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <strong>{r.origin} → {r.destination}</strong> ({r.travel_class}) — {r.purpose || "no purpose"}
-                  <div style={{ fontSize: 13, color: "#555" }}>
-                    {r.requester_name || "unknown requester"} · Predicted: R{r.predicted_cost ?? "—"} · {r.start_date} to{" "}
-                    {r.end_date}
+        : requests.map((r) => {
+            const comment = comments[r.id] || "";
+            return (
+              <div key={r.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <strong>{r.origin} → {r.destination}</strong> ({r.travel_class}) — {r.purpose || "no purpose"}
+                    <div style={{ fontSize: 13, color: "#555" }}>
+                      {r.requester_name || "unknown requester"} · Predicted: R{r.predicted_cost ?? "—"} · {r.start_date} to{" "}
+                      {r.end_date}
+                    </div>
                   </div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
                   {r.options.length === 0 && (
                     <button disabled={busyId === r.id} onClick={() => handleScore(r.id)}>
                       {busyId === r.id ? "Scoring…" : "Score options"}
                     </button>
                   )}
-                  <button disabled={busyId === r.id} onClick={() => handleReject(r.id)}>
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="Comment (required to reject, optional to approve)"
+                  value={comment}
+                  onChange={(e) => setComment(r.id, e.target.value)}
+                  style={{ width: "100%", padding: 6, margin: "10px 0", boxSizing: "border-box", fontSize: 13 }}
+                />
+
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: r.options.length > 0 ? 0 : 0 }}>
+                  <button disabled={busyId === r.id || !comment.trim()} onClick={() => handleReject(r.id)}>
                     Reject
                   </button>
                 </div>
-              </div>
 
-              {r.options.length > 0 && (
-                <Recommendation
-                  result={{ recommendation: r.options[0], options: r.options }}
-                  busy={busyId === r.id}
-                  onApprove={(option) => handleApprove(r.id, option)}
-                />
-              )}
-            </div>
-          ))}
+                {r.options.length > 0 && (
+                  <Recommendation
+                    result={{ recommendation: r.options[0], options: r.options }}
+                    busy={busyId === r.id}
+                    onApprove={(option) => handleApprove(r.id, option)}
+                  />
+                )}
+              </div>
+            );
+          })}
     </div>
   );
 }
