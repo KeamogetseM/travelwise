@@ -438,3 +438,81 @@ describe("Approval and AuditLog as real entities", () => {
     expect(actions).toContain("approve_request");
   });
 });
+
+describe("database-level constraints", () => {
+  // These protect the data regardless of which layer is writing to it —
+  // tested directly against the DB, not through the Express app, since
+  // the whole point is that they hold even if application code has a bug.
+  let employee;
+  const createdIds = [];
+
+  beforeAll(async () => {
+    // These tests insert directly via the admin client, bypassing the app,
+    // so (unlike elsewhere in this file) nothing ever triggers requireAuth's
+    // lazy profiles upsert — pass a role explicitly so one is created now.
+    employee = await makeUser("it-dbconstraints", "employee");
+  });
+
+  afterAll(async () => {
+    await admin.from("travel_options").delete().in("request_id", createdIds);
+    await admin.from("travel_requests").delete().in("id", createdIds);
+    await deleteUser(employee);
+  });
+
+  async function expectRejected(table, row) {
+    const { data, error } = await admin.from(table).insert([row]).select();
+    expect(error).not.toBeNull();
+    if (data) await admin.from(table).delete().eq("id", data[0].id);
+  }
+
+  const base = {
+    user_id: null, // filled in per-test from employee.id
+    destination: "Delhi",
+    origin: "Mumbai",
+    travel_class: "Economy",
+    start_date: "2027-02-01",
+    end_date: "2027-02-02",
+  };
+
+  test("rejects an unrecognised status", async () => {
+    await expectRejected("travel_requests", { ...base, user_id: employee.id, status: "bogus" });
+  });
+
+  test("rejects end_date before start_date", async () => {
+    await expectRejected("travel_requests", { ...base, user_id: employee.id, start_date: "2027-02-10", end_date: "2027-02-01" });
+  });
+
+  test("rejects an origin/destination outside the 6 trained cities", async () => {
+    await expectRejected("travel_requests", { ...base, user_id: employee.id, destination: "Johannesburg" });
+    await expectRejected("travel_requests", { ...base, user_id: employee.id, origin: "Johannesburg" });
+  });
+
+  test("rejects a travel_class other than Economy/Business", async () => {
+    await expectRejected("travel_requests", { ...base, user_id: employee.id, travel_class: "FirstClass" });
+  });
+
+  test("rejects a negative estimated_cost or predicted_cost", async () => {
+    await expectRejected("travel_requests", { ...base, user_id: employee.id, estimated_cost: -1 });
+    await expectRejected("travel_requests", { ...base, user_id: employee.id, predicted_cost: -1 });
+  });
+
+  test("rejects negative cost/duration/score on travel_options", async () => {
+    const { data: request } = await admin.from("travel_requests").insert([{ ...base, user_id: employee.id }]).select().single();
+    createdIds.push(request.id);
+
+    await expectRejected("travel_options", { request_id: request.id, type: "x", cost: -1, duration: 1, score: 0.5 });
+    await expectRejected("travel_options", { request_id: request.id, type: "x", cost: 1, duration: -1, score: 0.5 });
+    await expectRejected("travel_options", { request_id: request.id, type: "x", cost: 1, duration: 1, score: -0.5 });
+  });
+
+  test("rejects a policy threshold that isn't positive", async () => {
+    await expectRejected("policies", { rule: "constraint-test", condition: "*", threshold: 0 });
+    await expectRejected("policies", { rule: "constraint-test", condition: "*", threshold: -5 });
+  });
+
+  test("a fully valid row is still accepted (constraints aren't overly strict)", async () => {
+    const { data, error } = await admin.from("travel_requests").insert([{ ...base, user_id: employee.id }]).select().single();
+    expect(error).toBeNull();
+    createdIds.push(data.id);
+  });
+});
