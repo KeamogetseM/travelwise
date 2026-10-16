@@ -84,3 +84,8 @@ export function updatePolicy(id, payload) {
 export function deletePolicy(id) {
   return request(`/policies/${id}`, { method: "DELETE" });
 }
+
+// Administrator reports
+export function getReports() {
+  return request("/reports");
+}

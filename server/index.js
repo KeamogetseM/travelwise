@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const supabase = require("./supabaseClient");
-const { scoreOptions, hydrate } = require("./scoringEngine");
+const { scoreOptions, hydrate, isCompliant } = require("./scoringEngine");
 const { predictCost } = require("./mlClient");
 
 const app = express();
@@ -500,6 +500,82 @@ app.delete("/api/policies/:id", requireAuth, requireRole("administrator"), async
   await logAction(req.user.id, "delete_policy", `Deleted policy ${id}`);
 
   res.json({ message: "Policy deleted" });
+});
+
+// Aggregate reports for the administrator (FR-10): request volume by status
+// and destination, approved spend, a live policy-compliance snapshot, and
+// recent activity straight from audit_log. Everything here is computed from
+// real stored data, not hardcoded.
+app.get("/api/reports", requireAuth, requireRole("administrator"), async (req, res) => {
+  const { data: requests, error: reqErr } = await supabase.from("travel_requests").select("status, destination");
+  if (reqErr) {
+    return res.status(500).json({ error: reqErr.message });
+  }
+
+  const requestsByStatus = { pending: 0, approved: 0, rejected: 0 };
+  const requestsByDestination = {};
+  for (const r of requests) {
+    requestsByStatus[r.status] = (requestsByStatus[r.status] || 0) + 1;
+    requestsByDestination[r.destination] = (requestsByDestination[r.destination] || 0) + 1;
+  }
+
+  const { data: approvedSpend, error: spendErr } = await supabase
+    .from("approvals")
+    .select("travel_options(cost)")
+    .eq("status", "approved");
+  if (spendErr) {
+    return res.status(500).json({ error: spendErr.message });
+  }
+  const approvedCosts = approvedSpend.map((a) => a.travel_options?.cost).filter((c) => c != null);
+  const totalApprovedSpend = approvedCosts.reduce((sum, c) => sum + c, 0);
+
+  const { data: policies, error: policiesErr } = await supabase.from("policies").select("*").eq("active", true);
+  if (policiesErr) {
+    return res.status(500).json({ error: policiesErr.message });
+  }
+  const { data: optionsForCompliance, error: optErr } = await supabase
+    .from("travel_options")
+    .select("cost, travel_requests(travel_class, destination, estimated_cost)");
+  if (optErr) {
+    return res.status(500).json({ error: optErr.message });
+  }
+  let compliantCount = 0;
+  for (const o of optionsForCompliance) {
+    if (!o.travel_requests) continue; // orphaned row safety net
+    const violations = isCompliant(o, o.travel_requests, policies);
+    if (violations.length === 0) compliantCount++;
+  }
+
+  const { data: recentActivity, error: logErr } = await supabase
+    .from("audit_log")
+    .select("action, details, timestamp, profiles(name)")
+    .order("timestamp", { ascending: false })
+    .limit(20);
+  if (logErr) {
+    return res.status(500).json({ error: logErr.message });
+  }
+
+  res.json({
+    requests_by_status: requestsByStatus,
+    requests_by_destination: requestsByDestination,
+    spend: {
+      approved_count: approvedCosts.length,
+      total_approved: totalApprovedSpend,
+      average_approved: approvedCosts.length > 0 ? Math.round((totalApprovedSpend / approvedCosts.length) * 100) / 100 : 0,
+    },
+    policy_compliance: {
+      compliant: compliantCount,
+      non_compliant: optionsForCompliance.length - compliantCount,
+      total_options: optionsForCompliance.length,
+      note: "A live snapshot against currently active policies, not a historical record of compliance at scoring time.",
+    },
+    recent_activity: recentActivity.map((a) => ({
+      action: a.action,
+      details: a.details,
+      actor_name: a.profiles?.name || "unknown",
+      created_at: a.timestamp,
+    })),
+  });
 });
 
 // Only bind a port when run directly (`node index.js` / nodemon), not when

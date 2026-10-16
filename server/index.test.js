@@ -516,3 +516,61 @@ describe("database-level constraints", () => {
     createdIds.push(data.id);
   });
 });
+
+describe("reports (administrator)", () => {
+  let administrator, nonAdmin, employee, supervisor, requestId;
+
+  beforeAll(async () => {
+    administrator = await makeUser("it-reports-admin", "administrator");
+    nonAdmin = await makeUser("it-reports-emp", null);
+    employee = await makeUser("it-reports-requester", null);
+    supervisor = await makeUser("it-reports-sup", "supervisor");
+
+    // Create, score and approve a request so the report has something real
+    // to aggregate (in particular, non-zero approved spend). Scoring and
+    // approving are supervisor-gated, not administrator-gated — only the
+    // final GET /reports call below is administrator-only.
+    const created = await request(app)
+      .post("/api/travel-requests")
+      .set("Authorization", `Bearer ${employee.token}`)
+      .send(sampleRequest);
+    requestId = created.body.request.id;
+
+    const scored = await request(app)
+      .post(`/api/travel-requests/${requestId}/score`)
+      .set("Authorization", `Bearer ${supervisor.token}`);
+
+    await request(app)
+      .post(`/api/travel-requests/${requestId}/approve`)
+      .set("Authorization", `Bearer ${supervisor.token}`)
+      .send({ option_id: scored.body.recommendation.id });
+  });
+
+  afterAll(async () => {
+    await admin.from("approvals").delete().eq("request_id", requestId);
+    await admin.from("travel_options").delete().eq("request_id", requestId);
+    await admin.from("travel_requests").delete().eq("id", requestId);
+    await deleteUser(administrator);
+    await deleteUser(nonAdmin);
+    await deleteUser(employee);
+    await deleteUser(supervisor);
+  });
+
+  test("a non-administrator is denied access to reports", async () => {
+    await request(app).get("/api/reports").set("Authorization", `Bearer ${nonAdmin.token}`).expect(403);
+  });
+
+  test("reports reflect real data, including the approval just made", async () => {
+    const res = await request(app)
+      .get("/api/reports")
+      .set("Authorization", `Bearer ${administrator.token}`)
+      .expect(200);
+
+    expect(res.body.requests_by_status.approved).toBeGreaterThanOrEqual(1);
+    expect(res.body.spend.approved_count).toBeGreaterThanOrEqual(1);
+    expect(res.body.spend.total_approved).toBeGreaterThan(0);
+    expect(res.body.policy_compliance.total_options).toBeGreaterThanOrEqual(3);
+    expect(res.body.recent_activity.length).toBeGreaterThan(0);
+    expect(res.body.recent_activity.some((a) => a.action === "approve_request")).toBe(true);
+  });
+});

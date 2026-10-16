@@ -5,6 +5,7 @@ import RequestForm from "./RequestForm";
 import Recommendation from "./Recommendation";
 import Approvals from "./Approvals";
 import Policies from "./Policies";
+import Reports from "./Reports";
 import Auth from "./Auth";
 
 export default function App() {
@@ -84,12 +85,20 @@ export default function App() {
             </button>
           )}
           {profile.role === "administrator" && (
-            <button
-              onClick={() => setView("policies")}
-              style={{ fontWeight: view === "policies" ? 700 : 400 }}
-            >
-              Policies
-            </button>
+            <>
+              <button
+                onClick={() => setView("policies")}
+                style={{ fontWeight: view === "policies" ? 700 : 400 }}
+              >
+                Policies
+              </button>
+              <button
+                onClick={() => setView("reports")}
+                style={{ fontWeight: view === "reports" ? 700 : 400 }}
+              >
+                Reports
+              </button>
+            </>
           )}
         </div>
       )}
@@ -98,6 +107,8 @@ export default function App() {
         <Approvals />
       ) : view === "policies" ? (
         <Policies />
+      ) : view === "reports" ? (
+        <Reports />
       ) : (
         <>
           <RequestForm onCreated={loadRequests} />
