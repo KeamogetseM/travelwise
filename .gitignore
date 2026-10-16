@@ -31,3 +31,7 @@ Assignments/tools/plantuml.jar
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Word/Office temp and lock files (created while a .docx/.xlsx/.pptx is open)
+~$*
+~WRL*.tmp
