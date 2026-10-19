@@ -39,43 +39,42 @@ export default function Auth() {
     setInfo(null);
   }
 
-  const box = { display: "block", width: "100%", padding: 8, margin: "4px 0 12px", boxSizing: "border-box" };
-
   return (
-    <div style={{ fontFamily: "system-ui", maxWidth: 360, margin: "80px auto", padding: "0 16px" }}>
-      <h1>TravelWise</h1>
-      <form onSubmit={handleSubmit} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-        <h3 style={{ marginTop: 0 }}>{mode === "sign-up" ? "Create account" : "Sign in"}</h3>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-brand">TravelWise</div>
+        <form onSubmit={handleSubmit}>
+          <h3 style={{ marginTop: 0 }}>{mode === "sign-up" ? "Create account" : "Sign in"}</h3>
 
-        {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
-        {info && <p style={{ color: "#1F4E79" }}>{info}</p>}
+          {error && <p className="error-text">Error: {error}</p>}
+          {info && <p style={{ color: "var(--color-primary)", fontSize: 13 }}>{info}</p>}
 
-        <label>Email
-          <input type="email" style={box} value={email} onChange={(e) => setEmail(e.target.value)} required />
-        </label>
+          <label className="field">Email
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </label>
 
-        <label>Password
-          <input
-            type="password"
-            style={box}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-          />
-        </label>
+          <label className="field">Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+            />
+          </label>
 
-        <button type="submit" disabled={busy}>
-          {busy ? "Please wait…" : mode === "sign-up" ? "Sign up" : "Sign in"}
-        </button>
+          <button type="submit" disabled={busy} style={{ width: "100%" }}>
+            {busy ? "Please wait…" : mode === "sign-up" ? "Sign up" : "Sign in"}
+          </button>
 
-        <p style={{ fontSize: 13, marginTop: 12 }}>
-          {mode === "sign-up" ? "Already have an account? " : "No account yet? "}
-          <a href="#" onClick={(e) => { e.preventDefault(); toggleMode(); }}>
-            {mode === "sign-up" ? "Sign in" : "Sign up"}
-          </a>
-        </p>
-      </form>
+          <p style={{ fontSize: 13, marginTop: 16, textAlign: "center" }}>
+            {mode === "sign-up" ? "Already have an account? " : "No account yet? "}
+            <a href="#" onClick={(e) => { e.preventDefault(); toggleMode(); }}>
+              {mode === "sign-up" ? "Sign in" : "Sign up"}
+            </a>
+          </p>
+        </form>
+      </div>
     </div>
   );
 }

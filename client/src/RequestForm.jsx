@@ -50,47 +50,49 @@ export default function RequestForm({ onCreated }) {
     }
   }
 
-  const box = { display: "block", width: "100%", padding: 8, margin: "4px 0 12px", boxSizing: "border-box" };
-
   return (
-    <form onSubmit={handleSubmit} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16, marginBottom: 24 }}>
+    <form onSubmit={handleSubmit} className="card">
       <h3 style={{ marginTop: 0 }}>New travel request</h3>
 
-      {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
+      {error && <p className="error-text">Error: {error}</p>}
 
-      <label>Origin
-        <select style={box} value={form.origin} onChange={(e) => update("origin", e.target.value)}>
-          {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+      <div className="form-grid">
+        <label className="field">Origin
+          <select value={form.origin} onChange={(e) => update("origin", e.target.value)}>
+            {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+
+        <label className="field">Destination
+          <select value={form.destination} onChange={(e) => update("destination", e.target.value)}>
+            {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+
+        <label className="field">Class
+          <select value={form.travel_class} onChange={(e) => update("travel_class", e.target.value)}>
+            {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <label className="field">Purpose
+        <input value={form.purpose} onChange={(e) => update("purpose", e.target.value)} />
       </label>
 
-      <label>Destination
-        <select style={box} value={form.destination} onChange={(e) => update("destination", e.target.value)}>
-          {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </label>
+      <div className="form-grid">
+        <label className="field">Start date
+          <input type="date" value={form.start_date} onChange={(e) => update("start_date", e.target.value)} required />
+        </label>
 
-      <label>Class
-        <select style={box} value={form.travel_class} onChange={(e) => update("travel_class", e.target.value)}>
-          {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </label>
+        <label className="field">End date
+          <input type="date" value={form.end_date} onChange={(e) => update("end_date", e.target.value)} required />
+        </label>
 
-      <label>Purpose
-        <input style={box} value={form.purpose} onChange={(e) => update("purpose", e.target.value)} />
-      </label>
-
-      <label>Start date
-        <input type="date" style={box} value={form.start_date} onChange={(e) => update("start_date", e.target.value)} required />
-      </label>
-
-      <label>End date
-        <input type="date" style={box} value={form.end_date} onChange={(e) => update("end_date", e.target.value)} required />
-      </label>
-
-      <label>Estimated cost (R) — your own guess, optional
-        <input type="number" style={box} value={form.estimated_cost} onChange={(e) => update("estimated_cost", e.target.value)} />
-      </label>
+        <label className="field">Estimated cost (R) — optional
+          <input type="number" value={form.estimated_cost} onChange={(e) => update("estimated_cost", e.target.value)} />
+        </label>
+      </div>
 
       <button type="submit" disabled={saving}>
         {saving ? "Saving..." : "Submit request"}

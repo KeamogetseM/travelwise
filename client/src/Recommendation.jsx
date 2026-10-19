@@ -2,8 +2,8 @@
 
 function Bar({ value }) {
   return (
-    <div style={{ background: "#eee", borderRadius: 4, height: 8, width: 120, overflow: "hidden" }}>
-      <div style={{ width: `${Math.round(value * 100)}%`, height: "100%", background: "#1F4E79" }} />
+    <div style={{ background: "var(--color-border)", borderRadius: 4, height: 8, width: 110, overflow: "hidden" }}>
+      <div style={{ width: `${Math.round(value * 100)}%`, height: "100%", background: "var(--color-primary)" }} />
     </div>
   );
 }
@@ -12,52 +12,70 @@ function Bar({ value }) {
 // button per row (used by the supervisor Approvals view; omitted for the
 // requester's own read-only view). busy disables the buttons mid-request.
 export default function Recommendation({ result, loading, onApprove, busy }) {
-  if (loading) return <p>Scoring options…</p>;
+  if (loading) return <p className="muted">Scoring options…</p>;
   if (!result) return null;
 
   const { recommendation, options } = result;
 
   return (
-    <div style={{ marginTop: 12 }}>
+    <div style={{ marginTop: 14 }}>
       {/* Recommended option highlighted */}
-      <div style={{ border: "2px solid #1F4E79", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+      <div
+        style={{
+          border: "1.5px solid var(--color-primary)",
+          background: "var(--color-primary-light)",
+          borderRadius: "var(--radius)",
+          padding: 14,
+          marginBottom: 14,
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <strong>Recommended: {recommendation.type}</strong>
-          <span style={{ fontSize: 22, fontWeight: 700 }}>{recommendation.score.toFixed(2)}</span>
+          <span style={{ fontSize: 20, fontWeight: 700, color: "var(--color-primary)" }}>
+            {recommendation.score.toFixed(2)}
+          </span>
         </div>
-        <div style={{ fontSize: 13, color: "#555", margin: "6px 0" }}>
+        <div className="muted" style={{ margin: "6px 0" }}>
           R{recommendation.cost} · {recommendation.duration}h ·{" "}
-          {recommendation.compliant
-            ? "✅ policy compliant"
-            : `⚠️ ${recommendation.violations?.join("; ") || "policy violation"}`}
+          {recommendation.compliant ? (
+            <span className="badge badge-success">compliant</span>
+          ) : (
+            <span className="badge badge-danger" title={recommendation.violations?.join("; ")}>
+              {recommendation.violations?.join("; ") || "policy violation"}
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 13 }}>{recommendation.reason}</div>
       </div>
 
       {/* All options ranked */}
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+      <table>
         <thead>
-          <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
-            <th style={{ padding: 6 }}>Option</th>
-            <th style={{ padding: 6 }}>Cost</th>
-            <th style={{ padding: 6 }}>Time</th>
-            <th style={{ padding: 6 }}>Policy</th>
-            <th style={{ padding: 6 }}>Score</th>
-            {onApprove && <th style={{ padding: 6 }} />}
+          <tr>
+            <th>Option</th>
+            <th>Cost</th>
+            <th>Time</th>
+            <th>Policy</th>
+            <th>Score</th>
+            {onApprove && <th />}
           </tr>
         </thead>
         <tbody>
           {options.map((o, i) => (
-            <tr key={o.id ?? i} style={{ borderBottom: "1px solid #f0f0f0", background: i === 0 ? "#f2f6fb" : "white" }}>
-              <td style={{ padding: 6 }}>{o.type}</td>
-              <td style={{ padding: 6 }}>R{o.cost}</td>
-              <td style={{ padding: 6 }}>{o.duration}h</td>
-              <td style={{ padding: 6 }} title={o.violations?.join("; ") || ""}>{o.compliant ? "✅" : "⚠️"}</td>
-              <td style={{ padding: 6, display: "flex", alignItems: "center", gap: 8 }}>
-                <Bar value={o.score} /> {o.score.toFixed(2)}
+            <tr key={o.id ?? i} style={{ background: i === 0 ? "var(--color-primary-light)" : "transparent" }}>
+              <td>{o.type}</td>
+              <td>R{o.cost}</td>
+              <td>{o.duration}h</td>
+              <td title={o.violations?.join("; ") || ""}>
+                {o.compliant ? <span className="badge badge-success">✓</span> : <span className="badge badge-danger">✕</span>}
+              </td>
+              <td>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Bar value={o.score} /> {o.score.toFixed(2)}
+                </div>
               </td>
               {onApprove && (
-                <td style={{ padding: 6 }}>
+                <td>
                   <button disabled={busy || !o.id} onClick={() => onApprove(o)}>
                     Approve
                   </button>
