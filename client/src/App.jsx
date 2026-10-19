@@ -7,12 +7,20 @@ import Approvals from "./Approvals";
 import Policies from "./Policies";
 import Reports from "./Reports";
 import Auth from "./Auth";
+import StatusBadge from "./StatusBadge";
+
+const NAV = [
+  { key: "mine", label: "My Requests", roles: ["employee", "supervisor", "administrator"] },
+  { key: "approvals", label: "Approvals", roles: ["supervisor"] },
+  { key: "policies", label: "Policies", roles: ["administrator"] },
+  { key: "reports", label: "Reports", roles: ["administrator"] },
+];
 
 export default function App() {
   // undefined = still checking for an existing session, null = signed out
   const [session, setSession] = useState(undefined);
   const [profile, setProfile] = useState(null); // { id, name, role, email }
-  const [view, setView] = useState("mine");      // "mine" | "approvals"
+  const [view, setView] = useState("mine");
 
   const [requests, setRequests] = useState([]);
   const [error, setError] = useState(null);
@@ -59,89 +67,77 @@ export default function App() {
   if (session === undefined) return null; // avoid an auth-form flash while checking
   if (!session) return <Auth />;
 
+  const visibleNav = NAV.filter((n) => profile && n.roles.includes(profile.role));
+
   return (
-    <div style={{ fontFamily: "system-ui", maxWidth: 700, margin: "40px auto", padding: "0 16px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <h1>TravelWise</h1>
-        <div style={{ fontSize: 13, color: "#555" }}>
-          {session.user.email} · <button onClick={() => supabase.auth.signOut()}>Sign out</button>
-        </div>
-      </div>
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">TravelWise</div>
 
-      {(profile?.role === "supervisor" || profile?.role === "administrator") && (
-        <div style={{ display: "flex", gap: 8, margin: "16px 0" }}>
-          <button
-            onClick={() => setView("mine")}
-            style={{ fontWeight: view === "mine" ? 700 : 400 }}
-          >
-            My requests
-          </button>
-          {profile.role === "supervisor" && (
+        <nav className="sidebar-nav">
+          {visibleNav.map((n) => (
             <button
-              onClick={() => setView("approvals")}
-              style={{ fontWeight: view === "approvals" ? 700 : 400 }}
+              key={n.key}
+              className={`sidebar-link${view === n.key ? " active" : ""}`}
+              onClick={() => setView(n.key)}
             >
-              Approvals
+              {n.label}
             </button>
-          )}
-          {profile.role === "administrator" && (
-            <>
-              <button
-                onClick={() => setView("policies")}
-                style={{ fontWeight: view === "policies" ? 700 : 400 }}
-              >
-                Policies
-              </button>
-              <button
-                onClick={() => setView("reports")}
-                style={{ fontWeight: view === "reports" ? 700 : 400 }}
-              >
-                Reports
-              </button>
-            </>
-          )}
-        </div>
-      )}
-
-      {view === "approvals" ? (
-        <Approvals />
-      ) : view === "policies" ? (
-        <Policies />
-      ) : view === "reports" ? (
-        <Reports />
-      ) : (
-        <>
-          <RequestForm onCreated={loadRequests} />
-
-          <h2>Travel requests</h2>
-          {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
-          {requests.length === 0 && !error && <p>No requests yet.</p>}
-
-          {requests.map((r) => (
-            <div key={r.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <strong>{r.origin} → {r.destination}</strong> ({r.travel_class}) — {r.purpose || "no purpose"}
-                  <div style={{ fontSize: 13, color: "#555" }}>
-                    {r.predicted_cost != null
-                      ? <>Predicted: R{r.predicted_cost} (your estimate: R{r.estimated_cost ?? "—"})</>
-                      : <>Estimated: R{r.estimated_cost ?? "—"} (prediction unavailable)</>}
-                    {" "}· {r.status}
-                  </div>
-                  {r.decision_comment && (
-                    <div style={{ fontSize: 13, fontStyle: "italic", color: "#555", marginTop: 4 }}>
-                      {r.status === "approved" ? "Approved" : "Rejected"}: “{r.decision_comment}”
-                    </div>
-                  )}
-                </div>
-                <button onClick={() => handleScore(r.id)}>Score options</button>
-              </div>
-
-              {activeId === r.id && <Recommendation result={result} loading={loading} />}
-            </div>
           ))}
-        </>
-      )}
+        </nav>
+
+        {profile && (
+          <div className="sidebar-footer">
+            <div className="email">{session.user.email}</div>
+            <div><span className="role">{profile.role}</span></div>
+            <button className="secondary" style={{ width: "100%" }} onClick={() => supabase.auth.signOut()}>
+              Sign out
+            </button>
+          </div>
+        )}
+      </aside>
+
+      <main className="main">
+        {view === "approvals" ? (
+          <Approvals />
+        ) : view === "policies" ? (
+          <Policies />
+        ) : view === "reports" ? (
+          <Reports />
+        ) : (
+          <>
+            <RequestForm onCreated={loadRequests} />
+
+            <h2>Travel requests</h2>
+            {error && <p className="error-text">Error: {error}</p>}
+            {requests.length === 0 && !error && <p className="muted">No requests yet.</p>}
+
+            {requests.map((r) => (
+              <div key={r.id} className="card">
+                <div className="card-row">
+                  <div>
+                    <strong>{r.origin} → {r.destination}</strong> ({r.travel_class}) — {r.purpose || "no purpose"}
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {r.predicted_cost != null
+                        ? <>Predicted: R{r.predicted_cost} (your estimate: R{r.estimated_cost ?? "—"})</>
+                        : <>Estimated: R{r.estimated_cost ?? "—"} (prediction unavailable)</>}
+                      {" "}· <StatusBadge status={r.status} />
+                    </div>
+                    {r.decision_comment && (
+                      <div className="muted" style={{ fontStyle: "italic", marginTop: 6 }}>
+                        {r.status === "approved" ? "Approved" : "Rejected"}: “{r.decision_comment}”
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={() => handleScore(r.id)}>Score options</button>
+                </div>
+
+                {activeId === r.id && <Recommendation result={result} loading={loading} />}
+              </div>
+            ))}
+          </>
+        )}
+      </main>
     </div>
   );
 }

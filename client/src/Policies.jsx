@@ -88,83 +88,88 @@ export default function Policies() {
     }
   }
 
-  const box = { display: "block", width: "100%", padding: 8, margin: "4px 0 12px", boxSizing: "border-box" };
-
   return (
     <div>
       <h2>Travel Policies</h2>
-      {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
+      {error && <p className="error-text">Error: {error}</p>}
 
-      <form onSubmit={handleSubmit} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16, marginBottom: 24 }}>
+      <form onSubmit={handleSubmit} className="card">
         <h3 style={{ marginTop: 0 }}>New policy</h3>
 
-        <label>Rule name
-          <input style={box} value={form.rule} onChange={(e) => update("rule", e.target.value)} required />
+        <label className="field">Rule name
+          <input value={form.rule} onChange={(e) => update("rule", e.target.value)} required />
         </label>
 
-        <label>Applies to
-          <select style={box} value={form.conditionType} onChange={(e) => update("conditionType", e.target.value)}>
-            {CONDITION_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-          </select>
-        </label>
-
-        {form.conditionType === "class" && (
-          <label>Class
-            <select style={box} value={form.conditionValue} onChange={(e) => update("conditionValue", e.target.value)}>
-              {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+        <div className="form-grid">
+          <label className="field">Applies to
+            <select value={form.conditionType} onChange={(e) => update("conditionType", e.target.value)}>
+              {CONDITION_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
             </select>
           </label>
-        )}
 
-        {form.conditionType === "destination" && (
-          <label>Destination
-            <select style={box} value={form.conditionValue} onChange={(e) => update("conditionValue", e.target.value)}>
-              {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+          {form.conditionType === "class" && (
+            <label className="field">Class
+              <select value={form.conditionValue} onChange={(e) => update("conditionValue", e.target.value)}>
+                {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+          )}
+
+          {form.conditionType === "destination" && (
+            <label className="field">Destination
+              <select value={form.conditionValue} onChange={(e) => update("conditionValue", e.target.value)}>
+                {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+          )}
+
+          <label className="field">Maximum cost (R)
+            <input type="number" min="1" value={form.threshold} onChange={(e) => update("threshold", e.target.value)} required />
           </label>
-        )}
-
-        <label>Maximum cost (R)
-          <input type="number" min="1" style={box} value={form.threshold} onChange={(e) => update("threshold", e.target.value)} required />
-        </label>
+        </div>
 
         <button type="submit" disabled={saving}>
           {saving ? "Saving..." : "Add policy"}
         </button>
       </form>
 
-      {policies.length === 0 && !error && <p>No policies defined yet.</p>}
-
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead>
-          <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
-            <th style={{ padding: 6 }}>Rule</th>
-            <th style={{ padding: 6 }}>Applies to</th>
-            <th style={{ padding: 6 }}>Max cost</th>
-            <th style={{ padding: 6 }}>Active</th>
-            <th style={{ padding: 6 }} />
-          </tr>
-        </thead>
-        <tbody>
-          {policies.map((p) => (
-            <tr key={p.id} style={{ borderBottom: "1px solid #f0f0f0", opacity: p.active ? 1 : 0.5 }}>
-              <td style={{ padding: 6 }}>{p.rule}</td>
-              <td style={{ padding: 6 }}>{describeCondition(p.condition)}</td>
-              <td style={{ padding: 6 }}>R{p.threshold}</td>
-              <td style={{ padding: 6 }}>
-                <button disabled={busyId === p.id} onClick={() => toggleActive(p)}>
-                  {p.active ? "Deactivate" : "Activate"}
-                </button>
-              </td>
-              <td style={{ padding: 6 }}>
-                <button disabled={busyId === p.id} onClick={() => handleDelete(p)}>
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="card">
+        {policies.length === 0 && !error && <p className="muted">No policies defined yet.</p>}
+        {policies.length > 0 && (
+          <table>
+            <thead>
+              <tr>
+                <th>Rule</th>
+                <th>Applies to</th>
+                <th>Max cost</th>
+                <th>Status</th>
+                <th />
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {policies.map((p) => (
+                <tr key={p.id} style={{ opacity: p.active ? 1 : 0.55 }}>
+                  <td>{p.rule}</td>
+                  <td>{describeCondition(p.condition)}</td>
+                  <td>R{p.threshold}</td>
+                  <td><span className={`badge ${p.active ? "badge-success" : "badge-neutral"}`}>{p.active ? "active" : "inactive"}</span></td>
+                  <td>
+                    <button className="secondary" disabled={busyId === p.id} onClick={() => toggleActive(p)}>
+                      {p.active ? "Deactivate" : "Activate"}
+                    </button>
+                  </td>
+                  <td>
+                    <button className="danger" disabled={busyId === p.id} onClick={() => handleDelete(p)}>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
