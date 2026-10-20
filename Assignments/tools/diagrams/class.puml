@@ -1,5 +1,5 @@
 @startuml
-title Class Diagram - TravelWise Domain Model (updated, as implemented)
+title Class Diagram - TravelWise Domain Model (Assignment 4, as implemented)
 
 class Profile {
   +id : UUID
@@ -20,9 +20,6 @@ class TravelRequest {
   +estimated_cost : Decimal
   +predicted_cost : Decimal
   +status : String  ' pending | approved | rejected
-  +selected_option_id : UUID
-  +decided_by : UUID
-  +decided_at : DateTime
   +created_at : DateTime
 }
 
@@ -42,8 +39,25 @@ class Policy {
   +condition : String  ' "class=Economy" | "destination=Mumbai" | "*"
   +threshold : Decimal
   +active : Boolean
-  +created_at : DateTime
   +evaluate(option, request) : Boolean
+}
+
+class Approval {
+  +id : UUID
+  +request_id : UUID
+  +option_id : UUID
+  +status : String  ' approved | rejected
+  +comment : String
+  +approver_id : UUID
+  +decision_date : DateTime
+}
+
+class AuditLog {
+  +id : UUID
+  +user_id : UUID
+  +action : String
+  +details : String
+  +timestamp : DateTime
 }
 
 class "CostPredictionService" as CPS <<emerging tech>> {
@@ -55,17 +69,9 @@ class "CostPredictionService" as CPS <<emerging tech>> {
 Profile "1" -- "0..*" TravelRequest : raises >
 TravelRequest "1" *-- "1..*" TravelOption : generates >
 TravelRequest ..> CPS : uses >
-Profile "1" -- "0..*" TravelRequest : decides >
+TravelRequest "1" -- "0..1" Approval : decided by >
+Profile "1" -- "0..*" Approval : approves >
 TravelOption "0..*" -- "0..*" Policy : evaluated against >
-
-note bottom of TravelRequest
-  Approval and AuditLog are NOT separate
-  tables in the implemented system —
-  approval state is simplified into fields
-  directly on TravelRequest. Policy IS a
-  real, active table (see 2.2, 4.2). See
-  Limitations (5.4) for what's still
-  simplified.
-end note
+Profile "1" -- "0..*" AuditLog : performs >
 
 @enduml
