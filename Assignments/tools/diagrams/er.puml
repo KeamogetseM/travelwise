@@ -1,5 +1,5 @@
 @startuml
-title Entity-Relationship Diagram - TravelWise (Supabase / PostgreSQL, as implemented)
+title Entity-Relationship Diagram - TravelWise (Assignment 4, Supabase / PostgreSQL, as implemented)
 
 entity "profiles" as profiles {
   * id : uuid <<PK, = auth.users.id>>
@@ -13,18 +13,15 @@ entity "travel_requests" as requests {
   * id : uuid <<PK>>
   --
   user_id : uuid <<FK -> profiles.id>>
-  origin : text
-  destination : text
-  travel_class : text
+  origin : text <<check: 6 trained cities>>
+  destination : text <<check: 6 trained cities>>
+  travel_class : text <<check: Economy|Business>>
   purpose : text
   start_date : date
-  end_date : date
-  estimated_cost : numeric
-  predicted_cost : numeric
-  status : text <<pending|approved|rejected>>
-  selected_option_id : uuid <<FK -> travel_options.id>>
-  decided_by : uuid <<FK -> profiles.id>>
-  decided_at : timestamptz
+  end_date : date <<check: end >= start>>
+  estimated_cost : numeric <<check >= 0>>
+  predicted_cost : numeric <<check >= 0>>
+  status : text <<check: pending|approved|rejected>>
   created_at : timestamptz
 }
 
@@ -33,9 +30,9 @@ entity "travel_options" as options {
   --
   request_id : uuid <<FK -> travel_requests.id>>
   type : text
-  cost : numeric
-  duration : numeric
-  score : numeric
+  cost : numeric <<check >= 0>>
+  duration : numeric <<check >= 0>>
+  score : numeric <<check >= 0>>
   created_at : timestamptz
 }
 
@@ -44,15 +41,37 @@ entity "policies" as policies {
   --
   rule : text
   condition : text <<"class=X" | "destination=Y" | "*">>
-  threshold : numeric
+  threshold : numeric <<check > 0>>
   active : boolean
   created_at : timestamptz
 }
 
+entity "approvals" as approvals {
+  * id : uuid <<PK>>
+  --
+  request_id : uuid <<FK -> travel_requests.id, unique>>
+  option_id : uuid <<FK -> travel_options.id, nullable>>
+  status : text <<check: approved|rejected>>
+  comment : text
+  approver_id : uuid <<FK -> profiles.id>>
+  decision_date : timestamptz
+}
+
+entity "audit_log" as audit {
+  * id : uuid <<PK>>
+  --
+  user_id : uuid <<FK -> profiles.id>>
+  action : text
+  details : text
+  timestamp : timestamptz
+}
+
 profiles ||--o{ requests : "raises (user_id)"
-profiles ||--o{ requests : "decides (decided_by)"
 requests ||--|{ options : "generates (request_id)"
-requests }o..o| options : "selects (selected_option_id)"
+requests ||--o| approvals : "decided via (request_id)"
+options ||--o{ approvals : "selected as (option_id)"
+profiles ||--o{ approvals : "approves (approver_id)"
+profiles ||--o{ audit : "performs (user_id)"
 options }o..o{ policies : "evaluated against\n(app-level, by condition\nmatch — no FK)"
 
 @enduml

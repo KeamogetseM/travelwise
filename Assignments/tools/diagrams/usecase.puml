@@ -1,5 +1,5 @@
 @startuml
-title Use-Case Diagram - TravelWise (updated, as implemented)
+title Use-Case Diagram - TravelWise (Assignment 4, as implemented)
 
 left to right direction
 
@@ -14,8 +14,10 @@ rectangle "TravelWise System" {
   usecase "Predict Travel Cost" as UC3
   usecase "Generate Travel Options" as UC4
   usecase "Score and Recommend\nOptions" as UC5
-  usecase "Approve or Reject\nRequest" as UC6
+  usecase "Approve or Reject\nRequest (with comment)" as UC6
   usecase "View My Requests" as UC7
+  usecase "Manage Policies" as UC8
+  usecase "View Reports" as UC9
 }
 
 Employee --> UC1
@@ -32,13 +34,7 @@ UC3 --> ML
 Supervisor --> UC5 : reviews
 Supervisor --> UC6
 
-note right of UC6
-  Administrator has no
-  implemented use cases yet
-  (Manage Policies / View
-  Reports are design-only —
-  see traceability matrix,
-  status "Not met").
-end note
+Administrator --> UC8
+Administrator --> UC9
 
 @enduml
