@@ -24,6 +24,8 @@ export default function Policies() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(emptyForm);
 
   function load() {
     getPolicies()
@@ -67,6 +69,47 @@ export default function Policies() {
     setBusyId(policy.id);
     try {
       await updatePolicy(policy.id, { active: !policy.active });
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function startEdit(policy) {
+    const [field, value] = policy.condition === "*" ? [null, null] : policy.condition.split("=");
+    setEditingId(policy.id);
+    setEditForm({
+      rule: policy.rule,
+      conditionType: policy.condition === "*" ? "everyone" : field,
+      conditionValue: policy.condition === "*" ? "" : value,
+      threshold: String(policy.threshold),
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm(emptyForm);
+  }
+
+  function updateEdit(field, value) {
+    setEditForm((f) => ({
+      ...f,
+      [field]: value,
+      ...(field === "conditionType" && {
+        conditionValue: value === "class" ? CLASSES[0] : value === "destination" ? CITIES[0] : "",
+      }),
+    }));
+  }
+
+  async function handleEditSave(id) {
+    setError(null);
+    setBusyId(id);
+    try {
+      const condition = editForm.conditionType === "everyone" ? "*" : `${editForm.conditionType}=${editForm.conditionValue}`;
+      await updatePolicy(id, { rule: editForm.rule, condition, threshold: Number(editForm.threshold) });
+      cancelEdit();
       load();
     } catch (err) {
       setError(err.message);
@@ -148,24 +191,62 @@ export default function Policies() {
               </tr>
             </thead>
             <tbody>
-              {policies.map((p) => (
-                <tr key={p.id} style={{ opacity: p.active ? 1 : 0.55 }}>
-                  <td>{p.rule}</td>
-                  <td>{describeCondition(p.condition)}</td>
-                  <td>R{p.threshold}</td>
-                  <td><span className={`badge ${p.active ? "badge-success" : "badge-neutral"}`}>{p.active ? "active" : "inactive"}</span></td>
-                  <td>
-                    <button className="secondary" disabled={busyId === p.id} onClick={() => toggleActive(p)}>
-                      {p.active ? "Deactivate" : "Activate"}
-                    </button>
-                  </td>
-                  <td>
-                    <button className="danger" disabled={busyId === p.id} onClick={() => handleDelete(p)}>
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {policies.map((p) =>
+                editingId === p.id ? (
+                  <tr key={p.id}>
+                    <td>
+                      <input value={editForm.rule} onChange={(e) => updateEdit("rule", e.target.value)} />
+                    </td>
+                    <td>
+                      <select value={editForm.conditionType} onChange={(e) => updateEdit("conditionType", e.target.value)}>
+                        {CONDITION_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                      </select>
+                      {editForm.conditionType === "class" && (
+                        <select value={editForm.conditionValue} onChange={(e) => updateEdit("conditionValue", e.target.value)}>
+                          {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      )}
+                      {editForm.conditionType === "destination" && (
+                        <select value={editForm.conditionValue} onChange={(e) => updateEdit("conditionValue", e.target.value)}>
+                          {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      )}
+                    </td>
+                    <td>
+                      <input type="number" min="1" value={editForm.threshold} onChange={(e) => updateEdit("threshold", e.target.value)} />
+                    </td>
+                    <td><span className={`badge ${p.active ? "badge-success" : "badge-neutral"}`}>{p.active ? "active" : "inactive"}</span></td>
+                    <td colSpan={2} style={{ display: "flex", gap: 8 }}>
+                      <button disabled={busyId === p.id} onClick={() => handleEditSave(p.id)}>
+                        {busyId === p.id ? "Saving..." : "Save"}
+                      </button>
+                      <button className="secondary" disabled={busyId === p.id} onClick={cancelEdit}>
+                        Cancel
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={p.id} style={{ opacity: p.active ? 1 : 0.55 }}>
+                    <td>{p.rule}</td>
+                    <td>{describeCondition(p.condition)}</td>
+                    <td>R{p.threshold}</td>
+                    <td><span className={`badge ${p.active ? "badge-success" : "badge-neutral"}`}>{p.active ? "active" : "inactive"}</span></td>
+                    <td style={{ display: "flex", gap: 8 }}>
+                      <button className="secondary" disabled={busyId === p.id} onClick={() => startEdit(p)}>
+                        Edit
+                      </button>
+                      <button className="secondary" disabled={busyId === p.id} onClick={() => toggleActive(p)}>
+                        {p.active ? "Deactivate" : "Activate"}
+                      </button>
+                    </td>
+                    <td>
+                      <button className="danger" disabled={busyId === p.id} onClick={() => handleDelete(p)}>
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                )
+              )}
             </tbody>
           </table>
         )}
