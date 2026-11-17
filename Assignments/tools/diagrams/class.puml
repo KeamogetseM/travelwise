@@ -1,4 +1,6 @@
 @startuml
+skinparam classAttributeIconSize 0
+hide circle
 title Class Diagram - TravelWise Domain Model (Assignment 4, as implemented)
 
 class Profile {

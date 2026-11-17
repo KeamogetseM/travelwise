@@ -49,6 +49,7 @@ function DecidedCard({ r }) {
 // one option or reject), plus tabs to review past approve/reject decisions.
 export default function Approvals() {
   const [tab, setTab] = useState("pending");
+  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
   const [requests, setRequests] = useState([]);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null); // request currently being acted on
@@ -60,9 +61,21 @@ export default function Approvals() {
       .catch((err) => setError(err.message));
   }
 
+  function loadCounts() {
+    Promise.all(TABS.map((t) => getApprovals(t.key)))
+      .then(([pending, approved, rejected]) =>
+        setCounts({ pending: pending.requests.length, approved: approved.requests.length, rejected: rejected.requests.length })
+      )
+      .catch(() => {});
+  }
+
   useEffect(() => {
     load(tab);
   }, [tab]);
+
+  useEffect(() => {
+    loadCounts();
+  }, []);
 
   function setComment(id, value) {
     setComments((c) => ({ ...c, [id]: value }));
@@ -87,6 +100,7 @@ export default function Approvals() {
     try {
       await approveTravelRequest(id, option.id, comments[id]);
       setRequests((rs) => rs.filter((r) => r.id !== id)); // no longer pending
+      loadCounts();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -100,6 +114,7 @@ export default function Approvals() {
     try {
       await rejectTravelRequest(id, comments[id]);
       setRequests((rs) => rs.filter((r) => r.id !== id));
+      loadCounts();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -109,7 +124,12 @@ export default function Approvals() {
 
   return (
     <div>
-      <h2>Approvals</h2>
+      <div className="page-header">
+        <div>
+          <h1>Approvals</h1>
+          <p className="subtitle">Review your team's trips. Pick the option to approve, or reject with a reason.</p>
+        </div>
+      </div>
 
       <div className="tabs">
         {TABS.map((t) => (
@@ -118,7 +138,7 @@ export default function Approvals() {
             className={`link-tab${tab === t.key ? " active" : ""}`}
             onClick={() => setTab(t.key)}
           >
-            {t.label}
+            {t.label} <span className="tab-count">{counts[t.key]}</span>
           </button>
         ))}
       </div>
@@ -134,18 +154,34 @@ export default function Approvals() {
               <div key={r.id} className="card">
                 <div className="card-row">
                   <div>
-                    <strong>{r.origin} → {r.destination}</strong> ({r.travel_class}) — {r.purpose || "no purpose"}
+                    <strong>{r.origin} → {r.destination}</strong> <span className="pill">{r.travel_class}</span>
                     <div className="muted" style={{ marginTop: 4 }}>
-                      {r.requester_name || "unknown requester"} · Predicted: R{r.predicted_cost ?? "—"} · {r.start_date} to{" "}
-                      {r.end_date}
+                      {r.purpose || "No purpose given"} · requested by <strong>{r.requester_name || "unknown"}</strong>
                     </div>
                   </div>
-                  {r.options.length === 0 && (
+                  <div style={{ display: "flex", gap: 24, textAlign: "right" }}>
+                    <div>
+                      <div className="muted" style={{ fontSize: 12 }}>Dates</div>
+                      <div>{r.start_date} – {r.end_date}</div>
+                    </div>
+                    <div>
+                      <div className="muted" style={{ fontSize: 12 }}>Declared budget</div>
+                      <div>{r.estimated_cost != null ? `R${r.estimated_cost}` : "—"}</div>
+                    </div>
+                    <div>
+                      <div className="muted" style={{ fontSize: 12 }}>Predicted</div>
+                      <div><strong>R{r.predicted_cost ?? "—"}</strong></div>
+                    </div>
+                  </div>
+                </div>
+
+                {r.options.length === 0 && (
+                  <div style={{ marginTop: 10 }}>
                     <button disabled={busyId === r.id} onClick={() => handleScore(r.id)}>
                       {busyId === r.id ? "Scoring…" : "Score options"}
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 <input
                   type="text"

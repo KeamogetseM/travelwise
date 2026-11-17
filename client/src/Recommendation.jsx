@@ -1,90 +1,87 @@
 // Renders the scored options and the recommended one for a request.
 
-function Bar({ value }) {
+function ScoreBar({ value }) {
   return (
-    <div style={{ background: "var(--color-border)", borderRadius: 4, height: 8, width: 110, overflow: "hidden" }}>
-      <div style={{ width: `${Math.round(value * 100)}%`, height: "100%", background: "var(--color-primary)" }} />
+    <div className="score-bar-track">
+      <div className="score-bar-fill" style={{ width: `${Math.round(value * 100)}%` }} />
     </div>
   );
 }
 
+const LABELS = { rail: "Rail + hotel", flight: "Flight + hotel", car: "Car + hotel" };
+
 // onApprove: optional (option) => void — when given, renders an "Approve"
-// button per row (used by the supervisor Approvals view; omitted for the
+// button per card (used by the supervisor Approvals view; omitted for the
 // requester's own read-only view). busy disables the buttons mid-request.
 export default function Recommendation({ result, loading, onApprove, busy }) {
   if (loading) return <p className="muted">Scoring options…</p>;
   if (!result) return null;
 
   const { recommendation, options } = result;
+  const anyCompliant = options.some((o) => o.compliant);
 
   return (
     <div style={{ marginTop: 14 }}>
-      {/* Recommended option highlighted */}
-      <div
-        style={{
-          border: "1.5px solid var(--color-primary)",
-          background: "var(--color-primary-light)",
-          borderRadius: "var(--radius)",
-          padding: 14,
-          marginBottom: 14,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <strong>Recommended: {recommendation.type}</strong>
-          <span style={{ fontSize: 20, fontWeight: 700, color: "var(--color-primary)" }}>
-            {recommendation.score.toFixed(2)}
+      {!anyCompliant && (
+        <div className="warning-banner">
+          <span>⚠</span>
+          <span>
+            <strong>No option is within policy.</strong> Approving any of them is an exception.
           </span>
         </div>
-        <div className="muted" style={{ margin: "6px 0" }}>
-          R{recommendation.cost} · {recommendation.duration}h ·{" "}
-          {recommendation.compliant ? (
-            <span className="badge badge-success">compliant</span>
-          ) : (
-            <span className="badge badge-danger" title={recommendation.violations?.join("; ")}>
-              {recommendation.violations?.join("; ") || "policy violation"}
-            </span>
-          )}
-        </div>
-        <div style={{ fontSize: 13 }}>{recommendation.reason}</div>
-      </div>
+      )}
 
-      {/* All options ranked */}
-      <table>
-        <thead>
-          <tr>
-            <th>Option</th>
-            <th>Cost</th>
-            <th>Time</th>
-            <th>Policy</th>
-            <th>Score</th>
-            {onApprove && <th />}
-          </tr>
-        </thead>
-        <tbody>
-          {options.map((o, i) => (
-            <tr key={o.id ?? i} style={{ background: i === 0 ? "var(--color-primary-light)" : "transparent" }}>
-              <td>{o.type}</td>
-              <td>R{o.cost}</td>
-              <td>{o.duration}h</td>
-              <td title={o.violations?.join("; ") || ""}>
-                {o.compliant ? <span className="badge badge-success">✓</span> : <span className="badge badge-danger">✕</span>}
-              </td>
-              <td>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Bar value={o.score} /> {o.score.toFixed(2)}
+      <div className="option-grid">
+        {options.map((o, i) => {
+          const isRecommended = recommendation && o.id === recommendation.id || (!recommendation?.id && i === 0);
+          const label = LABELS[o.type?.toLowerCase?.()] || o.type;
+          return (
+            <div key={o.id ?? i} className={`option-card${isRecommended ? " recommended" : ""}`}>
+              <div className="option-head">
+                <div>
+                  {isRecommended && <span className="badge badge-neutral" style={{ marginBottom: 6, display: "inline-block" }}>RECOMMENDED</span>}
+                  <div style={{ fontWeight: 700 }}>{label}</div>
                 </div>
-              </td>
+                <div className="option-score">
+                  {o.score.toFixed(2)}
+                  <span className="label">score</span>
+                </div>
+              </div>
+
+              <ScoreBar value={o.score} />
+
+              <div className="option-metrics">
+                <div>
+                  <span className="muted">Cost</span>
+                  <strong>R{o.cost}</strong>
+                </div>
+                <div>
+                  <span className="muted">Travel time</span>
+                  <strong>{o.duration}h</strong>
+                </div>
+              </div>
+
+              {o.reason && <div className="muted" style={{ fontSize: 13 }}>{o.reason}</div>}
+
+              <div className="option-flags">
+                {o.compliant ? (
+                  <span className="badge badge-success">Within policy</span>
+                ) : (
+                  (o.violations?.length ? o.violations : ["Policy violation"]).map((v, vi) => (
+                    <span key={vi} className="badge badge-danger">{v}</span>
+                  ))
+                )}
+              </div>
+
               {onApprove && (
-                <td>
-                  <button disabled={busy || !o.id} onClick={() => onApprove(o)}>
-                    Approve
-                  </button>
-                </td>
+                <button disabled={busy || !o.id} onClick={() => onApprove(o)} className={isRecommended ? "" : "secondary"}>
+                  Approve {o.type?.toLowerCase?.() || ""}
+                </button>
               )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
