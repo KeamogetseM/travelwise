@@ -8,12 +8,11 @@ const CONDITION_TYPES = [
   { key: "destination", label: "Destination" },
 ];
 
-function describeCondition(condition) {
-  if (condition === "*") return "Everyone";
+function ConditionPill({ condition }) {
+  if (condition === "*") return <span className="pill">Scope <strong>Everyone</strong></span>;
   const [field, value] = condition.split("=");
-  if (field === "class") return `Class: ${value}`;
-  if (field === "destination") return `Destination: ${value}`;
-  return condition;
+  const label = field === "class" ? "Class" : field === "destination" ? "Destination" : field;
+  return <span className="pill">{label} <strong>{value}</strong></span>;
 }
 
 const emptyForm = { rule: "", conditionType: "everyone", conditionValue: CLASSES[0], threshold: "" };
@@ -133,11 +132,16 @@ export default function Policies() {
 
   return (
     <div>
-      <h2>Travel Policies</h2>
+      <div className="page-header">
+        <div>
+          <h1>Travel policies</h1>
+          <p className="subtitle">Spending caps every scored option is checked against. {policies.filter((p) => p.active).length} active.</p>
+        </div>
+      </div>
       {error && <p className="error-text">Error: {error}</p>}
 
       <form onSubmit={handleSubmit} className="card">
-        <h3 style={{ marginTop: 0 }}>New policy</h3>
+        <h3 style={{ marginTop: 0 }}>Add a policy</h3>
 
         <label className="field">Rule name
           <input value={form.rule} onChange={(e) => update("rule", e.target.value)} required />
@@ -187,7 +191,6 @@ export default function Policies() {
                 <th>Max cost</th>
                 <th>Status</th>
                 <th />
-                <th />
               </tr>
             </thead>
             <tbody>
@@ -227,22 +230,14 @@ export default function Policies() {
                   </tr>
                 ) : (
                   <tr key={p.id} style={{ opacity: p.active ? 1 : 0.55 }}>
-                    <td>{p.rule}</td>
-                    <td>{describeCondition(p.condition)}</td>
+                    <td><strong>{p.rule}</strong></td>
+                    <td><ConditionPill condition={p.condition} /></td>
                     <td>R{p.threshold}</td>
-                    <td><span className={`badge ${p.active ? "badge-success" : "badge-neutral"}`}>{p.active ? "active" : "inactive"}</span></td>
-                    <td style={{ display: "flex", gap: 8 }}>
-                      <button className="secondary" disabled={busyId === p.id} onClick={() => startEdit(p)}>
-                        Edit
-                      </button>
-                      <button className="secondary" disabled={busyId === p.id} onClick={() => toggleActive(p)}>
-                        {p.active ? "Deactivate" : "Activate"}
-                      </button>
-                    </td>
-                    <td>
-                      <button className="danger" disabled={busyId === p.id} onClick={() => handleDelete(p)}>
-                        Delete
-                      </button>
+                    <td><span className={`badge ${p.active ? "badge-success" : "badge-neutral"}`}>{p.active ? "Active" : "Inactive"}</span></td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button className="icon-btn" disabled={busyId === p.id} onClick={() => startEdit(p)} title="Edit">✎</button>
+                      <button className="icon-btn" disabled={busyId === p.id} onClick={() => toggleActive(p)} title={p.active ? "Deactivate" : "Activate"}>⏻</button>
+                      <button className="icon-btn" disabled={busyId === p.id} onClick={() => handleDelete(p)} title="Delete" style={{ color: "var(--color-danger)" }}>🗑</button>
                     </td>
                   </tr>
                 )

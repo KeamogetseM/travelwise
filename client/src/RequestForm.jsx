@@ -50,20 +50,26 @@ export default function RequestForm({ onCreated }) {
     }
   }
 
+  function swap() {
+    setForm((f) => ({ ...f, origin: f.destination, destination: f.origin }));
+  }
+
   return (
     <form onSubmit={handleSubmit} className="card">
       <h3 style={{ marginTop: 0 }}>New travel request</h3>
 
       {error && <p className="error-text">Error: {error}</p>}
 
-      <div className="form-grid">
-        <label className="field">Origin
+      <div className="form-grid" style={{ gridTemplateColumns: "1fr auto 1fr 1fr", alignItems: "end" }}>
+        <label className="field">From
           <select value={form.origin} onChange={(e) => update("origin", e.target.value)}>
             {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </label>
 
-        <label className="field">Destination
+        <button type="button" className="icon-btn" onClick={swap} title="Swap" style={{ marginBottom: 14 }}>⇄</button>
+
+        <label className="field">To
           <select value={form.destination} onChange={(e) => update("destination", e.target.value)}>
             {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -76,27 +82,30 @@ export default function RequestForm({ onCreated }) {
         </label>
       </div>
 
-      <label className="field">Purpose
-        <input value={form.purpose} onChange={(e) => update("purpose", e.target.value)} />
+      <label className="field">Purpose of trip
+        <input placeholder="e.g. Client workshop, vendor review" value={form.purpose} onChange={(e) => update("purpose", e.target.value)} />
       </label>
 
       <div className="form-grid">
-        <label className="field">Start date
+        <label className="field">Departure
           <input type="date" value={form.start_date} onChange={(e) => update("start_date", e.target.value)} required />
         </label>
 
-        <label className="field">End date
+        <label className="field">Return
           <input type="date" value={form.end_date} onChange={(e) => update("end_date", e.target.value)} required />
         </label>
 
-        <label className="field">Estimated cost (R) — optional
-          <input type="number" value={form.estimated_cost} onChange={(e) => update("estimated_cost", e.target.value)} />
+        <label className="field">Your budget estimate (optional)
+          <input type="number" placeholder="0" value={form.estimated_cost} onChange={(e) => update("estimated_cost", e.target.value)} />
         </label>
       </div>
 
-      <button type="submit" disabled={saving}>
-        {saving ? "Saving..." : "Submit request"}
-      </button>
+      <div className="card-row">
+        <p className="muted" style={{ margin: 0 }}>We'll price rail, flight and car options and check them against policy.</p>
+        <button type="submit" disabled={saving}>
+          {saving ? "Saving..." : "Submit request"}
+        </button>
+      </div>
     </form>
   );
 }
