@@ -1,9 +1,11 @@
 // Central place for all calls to the backend API.
-// Thanks to the Vite proxy, "/api/..." is forwarded to http://localhost:5000
+// In local dev, the Vite proxy forwards "/api/..." to http://localhost:5000.
+// In production there's no proxy, so VITE_API_URL must point at the deployed
+// server (e.g. https://travelwise-server.onrender.com/api).
 
 import { supabase } from "./supabaseClient";
 
-const API = "/api";
+const API = import.meta.env.VITE_API_URL || "/api";
 
 async function request(path, options = {}) {
   const { data: { session } } = await supabase.auth.getSession();

@@ -8,6 +8,7 @@
 # we derive it from a per-route median built from the training data.
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -86,4 +87,4 @@ def predict_cost():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
