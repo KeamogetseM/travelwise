@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import { getReports } from "./api";
 
-function formatWhen(iso) {
-  return iso ? new Date(iso).toLocaleString() : "";
-}
-
 export default function Reports() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -18,13 +14,32 @@ export default function Reports() {
   if (error) return <p className="error-text">Error: {error}</p>;
   if (!data) return <p className="muted">Loading…</p>;
 
-  const { requests_by_status, requests_by_destination, spend, policy_compliance, recent_activity } = data;
+  const { requests_by_status, requests_by_destination, requests_by_class, spend, policy_compliance } = data;
   const maxDest = Math.max(1, ...Object.values(requests_by_destination));
+  const maxClass = Math.max(1, ...Object.values(requests_by_class));
   const compliantPct = policy_compliance.total_options
     ? Math.round((policy_compliance.compliant / policy_compliance.total_options) * 100)
     : 0;
 
-  const ACTION_VARIANT = { Submitted: "badge-warning", Approved: "badge-success", Rejected: "badge-danger" };
+  function exportCsv() {
+    const lines = [];
+    lines.push("Section,Key,Value");
+    for (const [status, count] of Object.entries(requests_by_status)) lines.push(`Requests by status,${status},${count}`);
+    for (const [city, count] of Object.entries(requests_by_destination)) lines.push(`Requests by destination,${city},${count}`);
+    for (const [cls, count] of Object.entries(requests_by_class)) lines.push(`Requests by class,${cls},${count}`);
+    lines.push(`Spend,Total approved,${spend.total_approved}`);
+    lines.push(`Spend,Average approved,${spend.average_approved}`);
+    lines.push(`Policy compliance,Compliant,${policy_compliance.compliant}`);
+    lines.push(`Policy compliance,Non-compliant,${policy_compliance.non_compliant}`);
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `travelwise-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div>
@@ -33,6 +48,7 @@ export default function Reports() {
           <h1>Reports</h1>
           <p className="subtitle">Requests, approved spend and policy compliance across the company.</p>
         </div>
+        <button onClick={exportCsv}>Export CSV</button>
       </div>
 
       <div className="stat-cards">
@@ -85,20 +101,26 @@ export default function Reports() {
             <span><span className="pill">■</span> Non-compliant <strong>{policy_compliance.non_compliant}</strong></span>
           </div>
         </div>
-      </div>
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Recent activity</h3>
-        {recent_activity.length === 0 && <p className="muted">No activity recorded yet.</p>}
-        {recent_activity.length > 0 && recent_activity.map((a, i) => (
-          <div key={i} className="card-row" style={{ padding: "10px 0", borderBottom: i < recent_activity.length - 1 ? "1px solid #f0f1f3" : "none" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span className={`badge ${ACTION_VARIANT[a.action] || "badge-neutral"}`}>{a.action}</span>
-              <span>{a.details}</span>
+        <div className="card" style={{ margin: 0 }}>
+          <h3>Requests by travel class</h3>
+          {Object.entries(requests_by_class).map(([cls, count]) => (
+            <div key={cls} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <div style={{ width: 80, fontSize: 13 }}>{cls}</div>
+              <div style={{ flex: 1 }} className="score-bar-track">
+                <div className="score-bar-fill" style={{ width: `${(count / maxClass) * 100}%` }} />
+              </div>
+              <div style={{ width: 20, fontSize: 13, textAlign: "right" }}>{count}</div>
             </div>
-            <span className="muted">{formatWhen(a.created_at)}</span>
-          </div>
-        ))}
+          ))}
+        </div>
+
+        <div className="card" style={{ margin: 0 }}>
+          <h3>Spend summary</h3>
+          <p className="muted">Based on {spend.approved_count} approved trip{spend.approved_count === 1 ? "" : "s"}.</p>
+          <div style={{ fontSize: 34, fontWeight: 700 }}>R{spend.total_approved}</div>
+          <div className="muted" style={{ marginTop: 4 }}>Average R{spend.average_approved} per approved trip</div>
+        </div>
       </div>
     </div>
   );

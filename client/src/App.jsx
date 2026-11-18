@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { getTravelRequests, scoreTravelRequest, getMe } from "./api";
+import { getTravelRequests, scoreTravelRequest, getMe, getApprovals } from "./api";
 import { supabase } from "./supabaseClient";
 import RequestForm from "./RequestForm";
 import Recommendation from "./Recommendation";
 import Approvals from "./Approvals";
 import Policies from "./Policies";
 import Reports from "./Reports";
+import Activity from "./Activity";
 import Auth from "./Auth";
 import StatusBadge from "./StatusBadge";
 
@@ -14,6 +15,7 @@ const NAV = [
   { key: "approvals", label: "Approvals", icon: "✅", roles: ["supervisor"] },
   { key: "policies", label: "Policies", icon: "🛡", roles: ["administrator"] },
   { key: "reports", label: "Reports", icon: "📊", roles: ["administrator"] },
+  { key: "activity", label: "Activity", icon: "🕘", roles: ["administrator"] },
 ];
 
 const FILTERS = [
@@ -37,6 +39,8 @@ export default function App() {
   const [result, setResult] = useState(null);       // the scoring result
   const [loading, setLoading] = useState(false);
 
+  const [pendingApprovals, setPendingApprovals] = useState(0); // team requests awaiting this supervisor
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
@@ -51,12 +55,22 @@ export default function App() {
       .catch((err) => setError(err.message));
   }
 
+  function loadPendingApprovals() {
+    getApprovals("pending")
+      .then((data) => setPendingApprovals(data.requests.length))
+      .catch(() => {});
+  }
+
   useEffect(() => {
     if (session) {
       loadRequests();
       getMe().then(setProfile).catch((err) => setError(err.message));
     }
   }, [session]);
+
+  useEffect(() => {
+    if (profile?.role === "supervisor") loadPendingApprovals();
+  }, [profile]);
 
   async function handleScore(id) {
     setActiveId(id);
@@ -104,8 +118,8 @@ export default function App() {
               onClick={() => setView(n.key)}
             >
               <span>{n.icon} {n.label}</span>
-              {n.key === "approvals" && counts.pending > 0 && (
-                <span className="nav-count">{counts.pending}</span>
+              {n.key === "approvals" && pendingApprovals > 0 && (
+                <span className="nav-count">{pendingApprovals}</span>
               )}
             </button>
           ))}
@@ -125,11 +139,13 @@ export default function App() {
 
       <main className="main">
         {view === "approvals" ? (
-          <Approvals />
+          <Approvals onDecision={loadPendingApprovals} />
         ) : view === "policies" ? (
           <Policies />
         ) : view === "reports" ? (
           <Reports />
+        ) : view === "activity" ? (
+          <Activity />
         ) : (
           <>
             <div className="page-header">
