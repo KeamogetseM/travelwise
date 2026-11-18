@@ -507,16 +507,18 @@ app.delete("/api/policies/:id", requireAuth, requireRole("administrator"), async
 // recent activity straight from audit_log. Everything here is computed from
 // real stored data, not hardcoded.
 app.get("/api/reports", requireAuth, requireRole("administrator"), async (req, res) => {
-  const { data: requests, error: reqErr } = await supabase.from("travel_requests").select("status, destination");
+  const { data: requests, error: reqErr } = await supabase.from("travel_requests").select("status, destination, travel_class");
   if (reqErr) {
     return res.status(500).json({ error: reqErr.message });
   }
 
   const requestsByStatus = { pending: 0, approved: 0, rejected: 0 };
   const requestsByDestination = {};
+  const requestsByClass = {};
   for (const r of requests) {
     requestsByStatus[r.status] = (requestsByStatus[r.status] || 0) + 1;
     requestsByDestination[r.destination] = (requestsByDestination[r.destination] || 0) + 1;
+    requestsByClass[r.travel_class] = (requestsByClass[r.travel_class] || 0) + 1;
   }
 
   const { data: approvedSpend, error: spendErr } = await supabase
@@ -558,6 +560,7 @@ app.get("/api/reports", requireAuth, requireRole("administrator"), async (req, r
   res.json({
     requests_by_status: requestsByStatus,
     requests_by_destination: requestsByDestination,
+    requests_by_class: requestsByClass,
     spend: {
       approved_count: approvedCosts.length,
       total_approved: totalApprovedSpend,

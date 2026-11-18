@@ -47,7 +47,7 @@ function DecidedCard({ r }) {
 
 // Supervisor view: pending requests across all users (score, then approve
 // one option or reject), plus tabs to review past approve/reject decisions.
-export default function Approvals() {
+export default function Approvals({ onDecision }) {
   const [tab, setTab] = useState("pending");
   const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
   const [requests, setRequests] = useState([]);
@@ -101,6 +101,7 @@ export default function Approvals() {
       await approveTravelRequest(id, option.id, comments[id]);
       setRequests((rs) => rs.filter((r) => r.id !== id)); // no longer pending
       loadCounts();
+      onDecision?.();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -115,6 +116,7 @@ export default function Approvals() {
       await rejectTravelRequest(id, comments[id]);
       setRequests((rs) => rs.filter((r) => r.id !== id));
       loadCounts();
+      onDecision?.();
     } catch (err) {
       setError(err.message);
     } finally {
