@@ -20,7 +20,7 @@ def main():
         print(f"{DEST} already present, skipping download")
         return
 
-    token = os.environ.get("GH_TOKEN")
+    token = (os.environ.get("GH_TOKEN") or "").strip()
     if not token:
         raise SystemExit("GH_TOKEN environment variable is not set")
 
