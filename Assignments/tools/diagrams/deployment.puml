@@ -1,15 +1,14 @@
 @startuml
-title Deployment Diagram - TravelWise (current, as-run state)
+title Deployment Diagram - TravelWise (live, cloud-deployed state)
 
-node "Developer Machine (Windows)" {
-  node "Node.js runtime" {
-    component "Vite dev server\n(client)\n:5173" as Vite
-    component "Express API\n(server)\n:5000" as Express
-  }
-  node "Python 3.13 venv" {
-    component "Flask ML service\n(ml-service)\n:8000" as Flask
-    artifact "model.joblib"
-  }
+node "Vercel" {
+  component "Static build\n(client, React)\ntravelwise-po1o.vercel.app" as Vite
+}
+
+node "Render" {
+  component "Express API\n(server)\ntravelwise-server-6lp1.onrender.com" as Express
+  component "Flask ML service\n(ml-service)\ntravelwise-ml-service.onrender.com" as Flask
+  artifact "model.joblib" as Model
 }
 
 cloud "Supabase Cloud" {
@@ -17,20 +16,20 @@ cloud "Supabase Cloud" {
   component "Auth service" as Auth
 }
 
-Vite --> Express : HTTP (proxied /api)
-Express --> Flask : HTTP :8000
+Vite --> Express : HTTPS (VITE_API_URL)
+Express --> Flask : HTTPS (ML_SERVICE_URL)
+Flask --> Model : loaded at build time\n(from a GitHub release asset)
 Express --> PG : REST (service role key)
 Vite --> Auth : REST (publishable key)
 
 note bottom
-  This reflects the system as it actually runs
-  today (local dev, three local processes + a
-  managed cloud database). The target three-host
-  cloud deployment described in Assignment 2
-  (React on Vercel; Node + Python on Render) has
-  NOT been carried out — see Limitations (5.4)
-  and the traceability matrix (2.2) for the
-  deployment-related requirement's honest status.
+  Deployed per the target three-host split from
+  Assignment 2 (React on Vercel; Node + Python
+  on Render), each as its own independently
+  deployable process, talking to the same managed
+  Supabase Postgres + Auth used throughout
+  development. See the traceability matrix (2.2)
+  for the deployment requirement's status.
 end note
 
 @enduml
